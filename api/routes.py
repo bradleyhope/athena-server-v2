@@ -23,6 +23,21 @@ logger = logging.getLogger("athena.api")
 router = APIRouter()
 
 
+# Debug endpoint - check settings
+@router.get("/debug/settings")
+async def debug_settings():
+    """Debug settings to see what DATABASE_URL contains."""
+    import os
+    from config import settings
+    
+    return {
+        "settings_database_url_length": len(settings.DATABASE_URL),
+        "settings_database_url_prefix": settings.DATABASE_URL[:50] if settings.DATABASE_URL else "EMPTY",
+        "env_database_url_length": len(os.getenv("DATABASE_URL", "")),
+        "env_database_url_prefix": os.getenv("DATABASE_URL", "")[:50] if os.getenv("DATABASE_URL", "") else "EMPTY"
+    }
+
+
 # Debug endpoint - direct connection
 @router.get("/debug/db")
 async def debug_db():
