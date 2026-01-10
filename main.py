@@ -1,0 +1,198 @@
+"""
+Athena Server v2 - Cognitive Extension System
+FastAPI server for Athena 2.0 with three-tier thinking model.
+"""
+
+import os
+import logging
+from contextlib import asynccontextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi.middleware.cors import CORSMiddleware
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+from config import settings
+from db.neon import get_db_connection, check_db_health
+from api.routes import router as api_router
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("athena")
+
+# Scheduler for cron jobs
+scheduler = AsyncIOScheduler(timezone=ZoneInfo("Europe/London"))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events."""
+    logger.info("Starting Athena Server v2...")
+    
+    # Check database connection
+    if not await check_db_health():
+        logger.error("Database connection failed - server may not function correctly")
+    else:
+        logger.info("Database connection successful")
+    
+    # Start scheduler
+    setup_scheduled_jobs()
+    scheduler.start()
+    logger.info("Scheduler started with jobs: %s", [job.id for job in scheduler.get_jobs()])
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down Athena Server v2...")
+    scheduler.shutdown()
+
+
+app = FastAPI(
+    title="Athena Server v2",
+    description="Cognitive Extension System - Three-tier thinking model",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Authentication dependency
+async def verify_api_key(authorization: str = Header(None)):
+    """Verify API key for protected endpoints."""
+    if not settings.ATHENA_API_KEY:
+        return True  # No auth in development
+    
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid Authorization format")
+    
+    token = authorization.replace("Bearer ", "")
+    if token != settings.ATHENA_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    return True
+
+
+def setup_scheduled_jobs():
+    """Configure all scheduled jobs."""
+    from jobs.observation_burst import run_observation_burst
+    from jobs.pattern_detection import run_pattern_detection
+    from jobs.synthesis import run_synthesis
+    from jobs.morning_sessions import create_athena_thinking, create_agenda_workspace
+    from jobs.overnight_learning import run_overnight_learning
+    from jobs.weekly_rebuild import run_weekly_rebuild
+    
+    # Observation burst - every 30 minutes
+    scheduler.add_job(
+        run_observation_burst,
+        CronTrigger(minute="*/30"),
+        id="observation_burst",
+        name="Observation Burst (Tier 1)",
+        replace_existing=True
+    )
+    
+    # Pattern detection - every 2 hours
+    scheduler.add_job(
+        run_pattern_detection,
+        CronTrigger(hour="*/2", minute=15),
+        id="pattern_detection",
+        name="Pattern Detection (Tier 2)",
+        replace_existing=True
+    )
+    
+    # Synthesis - 4x daily (6am, 12pm, 6pm, 10pm London)
+    scheduler.add_job(
+        run_synthesis,
+        CronTrigger(hour="6,12,18,22", minute=30),
+        id="synthesis",
+        name="Synthesis (Tier 3)",
+        replace_existing=True
+    )
+    
+    # ATHENA THINKING - 6:00 AM London
+    scheduler.add_job(
+        create_athena_thinking,
+        CronTrigger(hour=6, minute=0),
+        id="athena_thinking",
+        name="ATHENA THINKING Session",
+        replace_existing=True
+    )
+    
+    # Agenda & Workspace - 6:05 AM London
+    scheduler.add_job(
+        create_agenda_workspace,
+        CronTrigger(hour=6, minute=5),
+        id="agenda_workspace",
+        name="Agenda & Workspace Session",
+        replace_existing=True
+    )
+    
+    # Overnight learning - every hour from midnight to 5am
+    scheduler.add_job(
+        run_overnight_learning,
+        CronTrigger(hour="0-5", minute=0),
+        id="overnight_learning",
+        name="Overnight Learning",
+        replace_existing=True
+    )
+    
+    # Weekly rebuild - Sunday midnight
+    scheduler.add_job(
+        run_weekly_rebuild,
+        CronTrigger(day_of_week="sun", hour=0, minute=0),
+        id="weekly_rebuild",
+        name="Weekly Synthesis Rebuild",
+        replace_existing=True
+    )
+    
+    logger.info("Scheduled jobs configured")
+
+
+# Root endpoint (public)
+@app.get("/")
+async def root():
+    """Health check and server info."""
+    return {
+        "name": "Athena Server v2",
+        "version": "2.0.0",
+        "status": "running",
+        "architecture": "Three-tier thinking model",
+        "tiers": {
+            "tier1": "GPT-5 nano (classification)",
+            "tier2": "Claude Haiku 4.5 (patterns)",
+            "tier3": "Claude Sonnet 4.5 (synthesis)"
+        },
+        "endpoints": {
+            "health": "/api/health",
+            "brief": "/api/brief",
+            "observations": "/api/observations",
+            "patterns": "/api/patterns",
+            "synthesis": "/api/synthesis",
+            "drafts": "/api/drafts",
+            "triggers": "/api/trigger/*"
+        }
+    }
+
+
+# Include API routes
+app.include_router(api_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=settings.PORT)
