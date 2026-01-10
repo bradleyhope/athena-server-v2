@@ -24,6 +24,9 @@ def get_db_connection(max_retries: int = MAX_RETRIES) -> Optional[psycopg2.exten
     """
     Get a database connection with retry logic for Neon cold starts.
     
+    Note: Do NOT use 'options' parameter with Neon pooler endpoint.
+    PgBouncer does not support startup parameters like statement_timeout.
+    
     Args:
         max_retries: Number of connection attempts
         
@@ -34,8 +37,9 @@ def get_db_connection(max_retries: int = MAX_RETRIES) -> Optional[psycopg2.exten
         try:
             conn = psycopg2.connect(
                 settings.DATABASE_URL,
-                connect_timeout=30,
-                options="-c statement_timeout=30000"
+                connect_timeout=30
+                # Note: Do NOT add options="-c statement_timeout=..." here
+                # Neon pooler (PgBouncer) does not support startup parameters
             )
             logger.debug(f"Database connection established (attempt {attempt + 1})")
             return conn

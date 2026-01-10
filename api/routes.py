@@ -100,8 +100,7 @@ async def debug_get_conn():
         try:
             conn = psycopg2.connect(
                 settings.DATABASE_URL,
-                connect_timeout=30,
-                options="-c statement_timeout=30000"
+                connect_timeout=30
             )
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM observations")
