@@ -23,10 +23,10 @@ logger = logging.getLogger("athena.api")
 router = APIRouter()
 
 
-# Debug endpoint
+# Debug endpoint - direct connection
 @router.get("/debug/db")
 async def debug_db():
-    """Debug database connection."""
+    """Debug database connection with direct psycopg2."""
     import psycopg2
     from config import settings
     
@@ -48,6 +48,52 @@ async def debug_db():
             "error_type": type(e).__name__,
             "database_url_length": len(settings.DATABASE_URL),
             "database_url_prefix": settings.DATABASE_URL[:50] if settings.DATABASE_URL else "EMPTY"
+        }
+
+
+# Debug endpoint - using db_cursor
+@router.get("/debug/db_cursor")
+async def debug_db_cursor():
+    """Debug database connection using db_cursor context manager."""
+    from db.neon import db_cursor
+    
+    try:
+        with db_cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM observations")
+            result = cursor.fetchone()
+            count = result['count'] if isinstance(result, dict) else result[0]
+        return {"status": "ok", "observations_count": count, "method": "db_cursor"}
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "method": "db_cursor"
+        }
+
+
+# Debug endpoint - using get_db_connection
+@router.get("/debug/get_conn")
+async def debug_get_conn():
+    """Debug database connection using get_db_connection function."""
+    from db.neon import get_db_connection
+    
+    try:
+        conn = get_db_connection(max_retries=3)
+        if not conn:
+            return {"status": "error", "error": "get_db_connection returned None", "method": "get_db_connection"}
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM observations")
+        count = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        return {"status": "ok", "observations_count": count, "method": "get_db_connection"}
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "method": "get_db_connection"
         }
 
 
