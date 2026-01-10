@@ -85,7 +85,8 @@ async def check_db_health() -> bool:
         True if database is accessible, False otherwise
     """
     try:
-        conn = get_db_connection(max_retries=1)
+        # Use full retry logic for Neon cold starts
+        conn = get_db_connection(max_retries=3)
         if conn:
             cursor = conn.cursor()
             cursor.execute("SELECT 1")

@@ -41,10 +41,10 @@ async def health_check():
 
 # Data endpoints
 @router.get("/observations")
-async def list_observations(limit: int = 50, source: Optional[str] = None):
+async def list_observations(limit: int = 50, source_type: Optional[str] = None):
     """Get recent observations."""
     try:
-        observations = get_recent_observations(limit=limit, source=source)
+        observations = get_recent_observations(limit=limit, source_type=source_type)
         return {
             "count": len(observations),
             "observations": observations
