@@ -87,29 +87,45 @@ async def debug_db_cursor():
         }
 
 
-# Debug endpoint - using get_db_connection
+# Debug endpoint - using get_db_connection with detailed error
 @router.get("/debug/get_conn")
 async def debug_get_conn():
-    """Debug database connection using get_db_connection function."""
-    from db.neon import get_db_connection
+    """Debug database connection using get_db_connection function with detailed errors."""
+    import psycopg2
+    import time
+    from config import settings
     
-    try:
-        conn = get_db_connection(max_retries=3)
-        if not conn:
-            return {"status": "error", "error": "get_db_connection returned None", "method": "get_db_connection"}
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM observations")
-        count = cursor.fetchone()[0]
-        cursor.close()
-        conn.close()
-        return {"status": "ok", "observations_count": count, "method": "get_db_connection"}
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "method": "get_db_connection"
-        }
+    errors = []
+    for attempt in range(3):
+        try:
+            conn = psycopg2.connect(
+                settings.DATABASE_URL,
+                connect_timeout=30,
+                options="-c statement_timeout=30000"
+            )
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM observations")
+            count = cursor.fetchone()[0]
+            cursor.close()
+            conn.close()
+            return {
+                "status": "ok", 
+                "observations_count": count, 
+                "method": "get_db_connection_inline",
+                "attempt": attempt + 1,
+                "previous_errors": errors
+            }
+        except Exception as e:
+            errors.append({"attempt": attempt + 1, "error": str(e), "type": type(e).__name__})
+            if attempt < 2:
+                time.sleep(5)
+    
+    return {
+        "status": "error",
+        "error": "All connection attempts failed",
+        "errors": errors,
+        "method": "get_db_connection_inline"
+    }
 
 
 # Health check
