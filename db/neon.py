@@ -80,21 +80,33 @@ def db_cursor(dict_cursor: bool = True) -> Generator:
 async def check_db_health() -> bool:
     """
     Check database connection health.
+    Uses direct psycopg2.connect() like the working debug endpoint.
     
     Returns:
         True if database is accessible, False otherwise
     """
-    try:
-        # Use full retry logic for Neon cold starts
-        conn = get_db_connection(max_retries=3)
-        if conn:
+    import psycopg2
+    from config import settings
+    
+    for attempt in range(3):
+        try:
+            conn = psycopg2.connect(
+                settings.DATABASE_URL,
+                connect_timeout=30
+            )
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
             cursor.close()
             conn.close()
+            logger.debug(f"Database health check passed (attempt {attempt + 1})")
             return True
-    except Exception as e:
-        logger.error(f"Database health check failed: {e}")
+        except Exception as e:
+            logger.warning(f"Database health check attempt {attempt + 1} failed: {e}")
+            if attempt < 2:
+                import time
+                time.sleep(5)
+    
+    logger.error("All database health check attempts failed")
     return False
 
 
