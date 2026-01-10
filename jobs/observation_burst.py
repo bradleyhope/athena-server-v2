@@ -150,17 +150,19 @@ def collect_gmail_observations(client: OpenAI) -> List[Dict]:
             classification = classify_email(client, email_data)
             
             observation = {
-                'source': 'gmail',
+                'source_type': 'gmail',
                 'source_id': msg['id'],
                 'observed_at': datetime.utcnow(),
                 'category': classification['category'],
                 'priority': classification['priority'],
+                'requires_action': classification.get('requires_response', False),
+                'title': email_data['subject'],
                 'summary': classification['summary'],
-                'raw_content': json.dumps(email_data),
-                'metadata': json.dumps({
+                'raw_metadata': json.dumps({
                     'from': email_data['from'],
                     'subject': email_data['subject'],
-                    'requires_response': classification.get('requires_response', False),
+                    'date': email_data['date'],
+                    'snippet': email_data['snippet'],
                     'action_needed': classification.get('action_needed')
                 })
             }
@@ -206,20 +208,19 @@ def collect_calendar_observations(client: OpenAI) -> List[Dict]:
             start_time = start.get('dateTime', start.get('date', ''))
             
             observation = {
-                'source': 'calendar',
+                'source_type': 'calendar',
                 'source_id': event['id'],
                 'observed_at': datetime.utcnow(),
                 'category': classification['category'],
                 'priority': classification['priority'],
+                'requires_action': classification.get('preparation_needed') is not None,
+                'title': event.get('summary', 'Untitled'),
                 'summary': classification['summary'],
-                'raw_content': json.dumps({
-                    'title': event.get('summary', 'Untitled'),
+                'raw_metadata': json.dumps({
+                    'event_title': event.get('summary', 'Untitled'),
                     'start': start_time,
                     'location': event.get('location'),
-                    'description': event.get('description', '')[:500]
-                }),
-                'metadata': json.dumps({
-                    'event_start': start_time,
+                    'description': event.get('description', '')[:500],
                     'preparation_needed': classification.get('preparation_needed')
                 })
             }

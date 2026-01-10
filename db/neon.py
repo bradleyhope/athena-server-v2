@@ -3,7 +3,7 @@ Athena Server v2 - Neon Database Connection
 PostgreSQL connection with retry logic for Neon cold starts.
 """
 
-import asyncio
+import time
 import logging
 from contextlib import contextmanager
 from typing import Optional, Generator
@@ -42,7 +42,7 @@ def get_db_connection(max_retries: int = MAX_RETRIES) -> Optional[psycopg2.exten
         except Exception as e:
             logger.warning(f"Database connection attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
-                asyncio.sleep(RETRY_DELAY)
+                time.sleep(RETRY_DELAY)
     
     logger.error("All database connection attempts failed")
     return None
@@ -97,18 +97,18 @@ async def check_db_health() -> bool:
     return False
 
 
-# Query helpers
+# Query helpers - Updated to match actual Neon schema
 
-def get_recent_observations(limit: int = 50, source: str = None) -> list:
+def get_recent_observations(limit: int = 50, source_type: str = None) -> list:
     """Get recent observations from the database."""
     with db_cursor() as cursor:
-        if source:
+        if source_type:
             cursor.execute("""
                 SELECT * FROM observations 
-                WHERE source = %s
+                WHERE source_type = %s
                 ORDER BY observed_at DESC 
                 LIMIT %s
-            """, (source, limit))
+            """, (source_type, limit))
         else:
             cursor.execute("""
                 SELECT * FROM observations 
@@ -123,9 +123,7 @@ def get_unprocessed_observations() -> list:
     with db_cursor() as cursor:
         cursor.execute("""
             SELECT * FROM observations 
-            WHERE id NOT IN (
-                SELECT DISTINCT unnest(observation_ids) FROM patterns
-            )
+            WHERE processed_tier_2 = FALSE OR processed_tier_2 IS NULL
             ORDER BY observed_at DESC
         """)
         return cursor.fetchall()
@@ -169,7 +167,7 @@ def get_canonical_memory() -> list:
     with db_cursor() as cursor:
         cursor.execute("""
             SELECT * FROM canonical_memory 
-            WHERE status = 'approved'
+            WHERE active = TRUE
             ORDER BY category, created_at DESC
         """)
         return cursor.fetchall()
@@ -180,63 +178,87 @@ def get_vip_contacts() -> list:
     with db_cursor() as cursor:
         cursor.execute("""
             SELECT * FROM canonical_memory 
-            WHERE category = 'vip_contact' AND status = 'approved'
+            WHERE category = 'vip_contact' AND active = TRUE
         """)
         return cursor.fetchall()
 
 
 def store_observation(observation: dict) -> str:
-    """Store a new observation and return its ID."""
+    """
+    Store a new observation and return its ID.
+    Schema: source_type, source_id, category, priority, requires_action,
+            title, summary, raw_metadata, observed_at
+    """
     with db_cursor() as cursor:
         cursor.execute("""
             INSERT INTO observations (
-                source, source_id, observed_at, category, priority,
-                summary, raw_content, metadata
+                source_type, source_id, observed_at, category, priority,
+                requires_action, title, summary, raw_metadata
             ) VALUES (
-                %(source)s, %(source_id)s, %(observed_at)s, %(category)s, %(priority)s,
-                %(summary)s, %(raw_content)s, %(metadata)s
+                %(source_type)s, %(source_id)s, %(observed_at)s, %(category)s, %(priority)s,
+                %(requires_action)s, %(title)s, %(summary)s, %(raw_metadata)s
             )
-            ON CONFLICT (source, source_id) DO UPDATE SET
+            ON CONFLICT (source_type, source_id) DO UPDATE SET
                 category = EXCLUDED.category,
                 priority = EXCLUDED.priority,
-                summary = EXCLUDED.summary
+                summary = EXCLUDED.summary,
+                requires_action = EXCLUDED.requires_action
             RETURNING id
         """, observation)
-        return cursor.fetchone()['id']
+        return str(cursor.fetchone()['id'])
+
+
+def mark_observations_processed_tier2(observation_ids: list):
+    """Mark observations as processed by Tier 2."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            UPDATE observations 
+            SET processed_tier_2 = TRUE 
+            WHERE id = ANY(%s::uuid[])
+        """, (observation_ids,))
 
 
 def store_pattern(pattern: dict) -> str:
-    """Store a new pattern and return its ID."""
+    """
+    Store a new pattern and return its ID.
+    Schema: pattern_type, pattern_name, description, confidence, evidence,
+            observation_ids, status, detected_at
+    """
     with db_cursor() as cursor:
         cursor.execute("""
             INSERT INTO patterns (
-                pattern_type, description, confidence, observation_ids,
-                detected_at, metadata
+                pattern_type, pattern_name, description, confidence, 
+                observation_ids, detected_at, evidence
             ) VALUES (
-                %(pattern_type)s, %(description)s, %(confidence)s, %(observation_ids)s,
-                %(detected_at)s, %(metadata)s
+                %(pattern_type)s, %(pattern_name)s, %(description)s, %(confidence)s,
+                %(observation_ids)s::uuid[], %(detected_at)s, %(evidence)s
             )
             RETURNING id
         """, pattern)
-        return cursor.fetchone()['id']
+        return str(cursor.fetchone()['id'])
 
 
 def store_synthesis(synthesis: dict) -> str:
-    """Store a new synthesis and return its ID."""
+    """
+    Store a new synthesis and return its ID.
+    Schema: synthesis_type, synthesis_number, observations_count, patterns_count,
+            executive_summary, key_insights, questions_for_bradley, 
+            suggested_memory_updates, action_recommendations
+    """
     with db_cursor() as cursor:
         cursor.execute("""
             INSERT INTO synthesis_memory (
-                synthesis_type, synthesis_number, executive_summary, key_insights,
-                questions_for_user, memory_proposals, action_recommendations,
-                observations_count, patterns_count, created_at
+                synthesis_type, synthesis_number, observations_count, patterns_count,
+                executive_summary, key_insights, questions_for_bradley,
+                suggested_memory_updates, action_recommendations, created_at
             ) VALUES (
-                %(synthesis_type)s, %(synthesis_number)s, %(executive_summary)s, %(key_insights)s,
-                %(questions_for_user)s, %(memory_proposals)s, %(action_recommendations)s,
-                %(observations_count)s, %(patterns_count)s, %(created_at)s
+                %(synthesis_type)s, %(synthesis_number)s, %(observations_count)s, %(patterns_count)s,
+                %(executive_summary)s, %(key_insights)s, %(questions_for_bradley)s,
+                %(suggested_memory_updates)s, %(action_recommendations)s, %(created_at)s
             )
             RETURNING id
         """, synthesis)
-        return cursor.fetchone()['id']
+        return str(cursor.fetchone()['id'])
 
 
 def store_email_draft(draft: dict) -> str:
@@ -251,4 +273,20 @@ def store_email_draft(draft: dict) -> str:
             )
             RETURNING id
         """, draft)
-        return cursor.fetchone()['id']
+        return str(cursor.fetchone()['id'])
+
+
+def update_deep_learning_progress(progress: dict) -> str:
+    """Store deep learning progress entry."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO deep_learning_progress (
+                source_type, source_id, source_title, content_length,
+                reading_time_seconds, insights_count, read_at
+            ) VALUES (
+                %(source_type)s, %(source_id)s, %(source_title)s, %(content_length)s,
+                %(reading_time_seconds)s, %(insights_count)s, %(read_at)s
+            )
+            RETURNING id
+        """, progress)
+        return str(cursor.fetchone()['id'])
