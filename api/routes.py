@@ -23,6 +23,34 @@ logger = logging.getLogger("athena.api")
 router = APIRouter()
 
 
+# Debug endpoint
+@router.get("/debug/db")
+async def debug_db():
+    """Debug database connection."""
+    import psycopg2
+    from config import settings
+    
+    try:
+        conn = psycopg2.connect(
+            settings.DATABASE_URL,
+            connect_timeout=30
+        )
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM observations")
+        count = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        return {"status": "ok", "observations_count": count, "database_url_length": len(settings.DATABASE_URL)}
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "database_url_length": len(settings.DATABASE_URL),
+            "database_url_prefix": settings.DATABASE_URL[:50] if settings.DATABASE_URL else "EMPTY"
+        }
+
+
 # Health check
 @router.get("/health")
 async def health_check():
