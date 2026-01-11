@@ -32,13 +32,20 @@ scheduler = AsyncIOScheduler(timezone=ZoneInfo("Europe/London"))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
+    import os
     logger.info("Starting Athena Server v2...")
+    logger.info(f"DATABASE_URL set: {bool(os.getenv('DATABASE_URL'))}")
+    logger.info(f"DATABASE_URL length: {len(os.getenv('DATABASE_URL', ''))}")
+    logger.info(f"DATABASE_URL prefix: {os.getenv('DATABASE_URL', '')[:50]}...")
     
-    # Check database connection
-    if not await check_db_health():
-        logger.error("Database connection failed - server may not function correctly")
-    else:
-        logger.info("Database connection successful")
+    # Check database connection - non-fatal to allow server to start
+    try:
+        if not await check_db_health():
+            logger.warning("Database connection failed - server may not function correctly")
+        else:
+            logger.info("Database connection successful")
+    except Exception as e:
+        logger.warning(f"Database health check exception: {e}")
     
     # Start scheduler
     setup_scheduled_jobs()
