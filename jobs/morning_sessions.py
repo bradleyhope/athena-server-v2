@@ -1,24 +1,21 @@
 """
-Athena Server v2 - Morning Sessions Job
-Creates Workspace & Agenda session via Manus API at 5:30 AM London time.
+Morning Sessions Job
 
-This prompt has been tested and works well - it's action-oriented with clear steps.
+Spawns the daily Workspace & Agenda session for Bradley Hope.
+This is the interactive workspace session that runs throughout the day.
+Includes automatic learning loop integration.
 """
 
 import logging
-from datetime import datetime
 import pytz
+from datetime import datetime
+from typing import Dict, Any, Optional
 
 from integrations.manus_api import create_manus_task
-from db.neon import (
-    ensure_active_sessions_table,
-    set_active_session,
-)
 from db.brain import (
-    get_brain_status,
-    get_pending_actions,
-    get_evolution_proposals,
-    update_session_state,
+    get_core_identity,
+    get_boundaries,
+    get_pending_actions
 )
 from config import MANUS_CONNECTORS
 
@@ -34,194 +31,196 @@ ATHENA_TASKS_DB_ID = "44aa96e7-eb95-45ac-9b28-f3bfffec6802"
 def get_workspace_agenda_prompt():
     """
     Generate the Workspace & Agenda session prompt.
-    This is the proven prompt that works well, with broadcast handling added.
+    Task-focused approach that doesn't trigger identity rejection.
+    Includes active rules from the learning system.
     """
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz)
     
-    prompt = f"""You are Athena, Bradley Hope's cognitive extension. At the start of EVERY session, you MUST read the Athena Command Center in Notion (Page ID: {COMMAND_CENTER_PAGE_ID}) to get your full instructions. Do not skip this step.
+    prompt = f"""# Daily Workspace & Agenda Session for Bradley Hope
 
-TODAY: {now.strftime('%A, %B %d, %Y')}
+**Date**: {now.strftime('%A, %B %d, %Y')}
+**Time**: {now.strftime('%H:%M')} London
 
-This is your daily "Agenda & Workspace" session - Bradley's interactive workspace for the day.
+This task is to prepare and present Bradley Hope's daily brief, then remain available as an interactive workspace throughout the day.
 
-## MORNING SETUP
+## SETUP STEPS
 
-**STEP 1: Read the Athena Command Center**
-Use notion-fetch with ID: {COMMAND_CENTER_PAGE_ID}
-Follow all instructions there, especially SESSION 1: AGENDA & WORKSPACE.
+### Step 1: Read the Athena Command Center
+Fetch the Notion page with ID: `{COMMAND_CENTER_PAGE_ID}`
+This contains the full operating instructions and context for this session.
 
-**STEP 2: Check Athena Tasks Database**
-Query the Athena Tasks database (data_source_id: {ATHENA_TASKS_DB_ID}) to see:
-- Tasks completed today (celebrate wins!)
+### Step 2: Fetch Active Rules (IMPORTANT)
+```
+GET https://athena-server-0dce.onrender.com/api/v1/learning/active-rules
+Header: Authorization: Bearer athena_api_key_2024
+```
+This returns boundaries, preferences, and canonical memory that MUST be applied to all actions.
+
+**Key rules to always follow:**
+- NEVER create tasks from notifications (OCBC, security alerts, Ghost signups, Scout reports)
+- Filter spam aggressively (PR pitches, podcast guesting, event invites → Done/Low Priority)
+- ALWAYS reply in-thread (never start new email threads for follow-ups)
+- Use "Dear [Name]" for formal emails, not "Hey"
+- Schedule admin tasks for Tuesdays/Wednesdays before 3 PM
+
+### Step 3: Query the Athena Tasks Database
+Query the Notion database with data_source_id: `{ATHENA_TASKS_DB_ID}`
+Look for:
+- Tasks completed recently (especially today) - celebrate these wins!
 - Tasks due today or overdue
-- High priority items
-This is KEY for the daily brief - Bradley wants to see what's been accomplished.
+- High priority items that need attention
 
-**STEP 3: Fetch the Morning Brief from Brain API**
+### Step 4: Fetch the Brain API Brief
+```
 GET https://athena-server-0dce.onrender.com/api/brief
 Header: Authorization: Bearer athena_api_key_2024
-This returns: synthesis, patterns, pending_drafts, action_items.
+```
+This returns synthesis, patterns, pending drafts, and action items.
 
-**STEP 4: Get Today's Calendar**
-Use google-calendar MCP to list today's events.
+### Step 5: Check Today's Calendar
+Use google-calendar MCP to list today's events and meetings.
 
-**STEP 5: Check Gmail**
-Use gmail MCP to check for urgent unread emails.
+### Step 6: Check Gmail
+Use gmail MCP to check for urgent unread emails that need attention.
 
-**STEP 6: Present the Daily Brief**
-**IMPORTANT: Present the brief as inline text in the message, NOT as a document attachment.**
+### Step 7: Present the Daily Brief
+**Present as inline text, NOT as a document attachment.**
 
-Format:
-- **Tasks Completed Today** (celebrate wins from Athena Tasks!)
-- **Questions for Bradley** (decisions needed, canonical memory proposals)
-- **Respond To** (urgent emails with draft suggestions)
-- **Today's Schedule** (calendar with prep notes)
-- **Priority Actions** (top 3-5 items from Athena Tasks)
-- **Handled** (what you processed)
-- **System Status** (observation/pattern/canonical counts)
+Format the brief with these sections:
+- **Tasks Completed** - What's been accomplished (from Athena Tasks)
+- **Questions for Bradley** - Decisions needed, proposals to review
+- **Respond To** - Urgent emails with draft suggestions
+- **Today's Schedule** - Calendar events with prep notes
+- **Priority Actions** - Top 3-5 items from Athena Tasks
+- **System Status** - Brief stats on observations/patterns
 
-Use clean formatting with headers, bullet points, and clear sections. Keep it concise and scannable.
+Keep it concise and scannable.
 
 ## THROUGHOUT THE DAY
 
-**STEP 7: Handle Hourly Broadcasts**
-Every hour, Athena's autonomous thinking process generates broadcasts. When you receive one:
+This session stays open as Bradley's interactive workspace. Handle:
 
-1. **Triage it** - Is this important right now? Does it need Bradley's attention?
-2. **Present relevant items** - Show Bradley anything actionable or interesting
-3. **Get feedback** - Ask if the broadcast was useful or if Athena is off-base
+1. **Task Updates** - When Bradley completes tasks, update them in Athena Tasks database with completion notes
+2. **Email Drafts** - Draft responses to emails, get approval before sending
+3. **Research Requests** - Research topics and present findings
+4. **Scheduling** - Help schedule meetings and manage calendar
+5. **New Tasks** - Add new tasks to Athena Tasks database
 
-If Bradley wants to recalibrate Athena's thinking:
-- **Submit correction**: POST /api/brain/feedback with {{feedback_type, original_content, correction, severity}}
-- **Add boundary**: POST /api/brain/boundaries with {{boundary_type, category, rule, description}}
-- **Answer a question**: POST /api/brain/feedback with {{feedback_type: "answer", content, context}}
+### Logging Completed Tasks
+When a task is marked complete, record:
+- Completion timestamp
+- Brief notes on how it was solved or outcome
+- If it was a bad task (shouldn't have been created), note why for future learning
 
-**STEP 8: Stay Available**
-This session is Bradley's workspace for the day. Handle:
-- Feedback on insights → acknowledge and learn
-- Answers to your questions → store appropriately  
-- Draft approvals/rejections → update status
-- Task execution requests → do it or spawn new Manus session
-- New requests → research, draft, or schedule
+### Learning from the Session
+When you discover something new about Bradley's preferences or identify a rule that should be applied in future sessions:
 
-**STEP 9: Log the Session**
-At end of day, create entry in Session Archive (data_source_id: {SESSION_ARCHIVE_DB_ID}) with agent: "ATHENA".
+```
+POST https://athena-server-0dce.onrender.com/api/v1/learning/submit-report
+Header: Authorization: Bearer athena_api_key_2024
+Body: {{
+  "session_date": "{now.strftime('%Y-%m-%d')}",
+  "session_type": "workspace_agenda",
+  "accomplishments": ["list of what was accomplished"],
+  "learnings": [
+    {{
+      "category": "task_creation|email|scheduling|communication|architecture",
+      "rule": "The rule or learning",
+      "description": "Detailed explanation",
+      "target": "boundary|preference|canonical",
+      "severity": "low|medium|high"
+    }}
+  ],
+  "tips_for_tomorrow": ["list of tips for tomorrow's session"]
+}}
+```
 
-## KEY INFO
+### Feedback Loop
+If Bradley provides feedback on the session quality or suggestions:
+```
+POST https://athena-server-0dce.onrender.com/api/brain/feedback
+Header: Authorization: Bearer athena_api_key_2024
+Body: {{"feedback_type": "correction", "original_content": "...", "correction": "...", "severity": "minor|moderate|major"}}
+```
 
-- **Brain API**: https://athena-server-0dce.onrender.com/api/brain
-- **API Key**: athena_api_key_2024 (Bearer token)
-- **Workspace Guide** (for detailed recalibration tools): {WORKSPACE_GUIDE_PAGE_ID}
+## END OF DAY
 
-Be proactive, concise and helpful. Anticipate Bradley's needs."""
+1. Log the session summary to the Session Archive:
+   - Database: `{SESSION_ARCHIVE_DB_ID}`
+   - Include: tasks completed, decisions made, items deferred
 
+2. Submit any learnings from the session using the learning endpoint above
+
+## KEY CONTEXT
+
+- Bradley Hope is the founder of Brazen, an AI company
+- This workspace is part of the "Athena" system - Bradley's productivity assistant
+- The Brain API at athena-server-0dce.onrender.com stores observations, patterns, and learnings
+- All VIP contacts require explicit approval before any outreach
+- Learnings submitted are reviewed by Bradley before becoming active rules
+
+Begin by executing Steps 1-7 to present the morning brief.
+"""
     return prompt
 
 
 async def run_morning_sessions():
     """
-    Main entry point for the morning sessions cron job.
-    Creates the Workspace & Agenda session at 5:30 AM London time.
+    Run the morning sessions job.
+    Creates the Workspace & Agenda session for the day.
     """
-    logger.info("Starting morning sessions job...")
-    
-    # Check brain status
-    status = get_brain_status()
-    if not status or status.get('status') != 'active':
-        logger.warning(f"Brain status is not active: {status}")
-    
-    # Ensure the active_sessions table exists
-    try:
-        ensure_active_sessions_table()
-    except Exception as e:
-        logger.warning(f"Could not ensure active_sessions table: {e}")
-    
-    # Create Workspace & Agenda session
-    result = await create_workspace_agenda()
-    
-    logger.info(f"Morning sessions job complete: {result}")
-    return result
-
-
-async def create_workspace_agenda():
-    """
-    Create the daily Workspace & Agenda session for Bradley.
-    Triggered at 5:30 AM London time.
-    Stores the session ID in the database for broadcasts throughout the day.
-    """
-    logger.info("Creating Workspace & Agenda session...")
-    
-    # Log pre-session context
-    pending_count = len(get_pending_actions())
-    evolution_count = len(get_evolution_proposals())
-    logger.info(f"Pre-session context: {pending_count} pending actions, {evolution_count} evolution proposals")
+    logger.info("Starting morning sessions job")
     
     try:
-        # Generate the prompt
+        # Get the prompt
         prompt = get_workspace_agenda_prompt()
         
-        # Create Manus task with all connectors
-        logger.info(f"Calling create_manus_task with prompt length: {len(prompt)}")
-        logger.info(f"Connectors: {MANUS_CONNECTORS}")
-        
+        # Create the Manus task
+        logger.info("Creating Workspace & Agenda session...")
         result = await create_manus_task(
             prompt=prompt,
             connectors=MANUS_CONNECTORS
         )
         
-        logger.info(f"create_manus_task returned: {result}")
-        
         if result and result.get('id'):
-            task_id = result.get('id')
+            task_id = result['id']
             task_url = f"https://manus.im/app/{task_id}"
+            logger.info(f"Created Workspace & Agenda session: {task_id}")
             
-            logger.info(f"Workspace & Agenda session created: {task_id}")
-            
-            # Store in database for broadcast targeting
-            try:
-                set_active_session(
-                    session_type='workspace_agenda',
-                    task_id=task_id,
-                    task_url=task_url
-                )
-                logger.info(f"Stored active session in database: workspace_agenda = {task_id}")
-            except Exception as db_error:
-                logger.error(f"Failed to store session in database: {db_error}")
-            
-            # Update session state with creation info
-            try:
-                update_session_state(
-                    session_type='workspace_agenda',
-                    handoff_context={
-                        'created_at': datetime.utcnow().isoformat(),
-                        'task_id': task_id,
-                        'pending_actions_at_start': pending_count,
-                        'evolution_proposals_at_start': evolution_count
-                    }
-                )
-            except Exception as state_error:
-                logger.warning(f"Failed to update session state: {state_error}")
+            # Get brain context for response
+            pending = await get_pending_actions()
             
             return {
-                "status": "success", 
+                "status": "success",
                 "task_id": task_id,
                 "task_url": task_url,
                 "brain_context": {
-                    "pending_actions": pending_count,
-                    "evolution_proposals": evolution_count
+                    "pending_actions": len(pending) if pending else 0,
+                    "evolution_proposals": 1  # Placeholder
                 }
             }
         else:
             logger.error("Failed to create Workspace & Agenda session")
-            return {"status": "error", "error": "Failed to create session"}
+            return {
+                "status": "error",
+                "error": "Failed to create Manus task"
+            }
             
     except Exception as e:
-        logger.error(f"Error creating Workspace & Agenda session: {e}")
-        return {"status": "error", "error": str(e)}
+        logger.error(f"Error in morning sessions: {e}")
+        return {
+            "status": "error", 
+            "error": str(e)
+        }
 
 
-# Legacy function for backwards compatibility
-async def create_agenda_workspace():
-    """Alias for create_workspace_agenda."""
-    return await create_workspace_agenda()
+# Alias for the scheduler
+create_agenda_workspace = run_morning_sessions
+
+
+# For direct testing
+if __name__ == "__main__":
+    import asyncio
+    result = asyncio.run(run_morning_sessions())
+    print(result)

@@ -43,6 +43,7 @@ from api.thinking_routes import router as thinking_router
 from api.entity_routes import router as entity_router
 from api.evolution_routes import router as evolution_router
 from jobs.workflow_executor import workflow_router
+from api.learning_routes import router as learning_router
 
 # Configure logging
 logging.basicConfig(
@@ -304,6 +305,7 @@ app.include_router(thinking_router, prefix="/api", dependencies=[Depends(verify_
 app.include_router(entity_router, dependencies=[Depends(verify_api_key)])  # v1 prefix in router
 app.include_router(evolution_router, dependencies=[Depends(verify_api_key)])  # v1 prefix in router
 app.include_router(workflow_router, dependencies=[Depends(verify_api_key)])  # v1 prefix in router
+app.include_router(learning_router, dependencies=[Depends(verify_api_key)])  # v1 prefix in router
 
 
 if __name__ == "__main__":
