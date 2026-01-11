@@ -1,9 +1,11 @@
 """
 Athena Server v2 - Morning Sessions Job
 Creates Workspace & Agenda session via Manus API at 5:30 AM London time.
-This is Bradley's daily interactive workspace that receives broadcasts from Athena.
 
-Updated for Brain 2.0: Lean prompts that reference Notion as source of truth.
+LEAN PROMPT APPROACH:
+- Short, action-oriented prompt
+- Points to Notion page for detailed instructions
+- Athena fetches her own context during the session
 """
 
 import logging
@@ -32,54 +34,39 @@ COMMAND_CENTER_PAGE_ID = "2e3d44b3-a00b-81ab-bbda-ced57f8c345d"
 
 def get_workspace_agenda_prompt():
     """
-    Generate the lean Workspace & Agenda session prompt.
-    Points to Notion as the source of truth for detailed instructions.
+    Generate a LEAN Workspace & Agenda session prompt.
+    Short and action-oriented - Athena reads her full instructions from Notion.
     """
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz)
     
-    prompt = f"""You are Athena, Bradley Hope's cognitive extension.
+    prompt = f"""You are Athena, Bradley Hope's AI Chief of Staff.
 
 TODAY: {now.strftime('%A, %B %d, %Y')}
-SESSION TYPE: Workspace & Agenda (Daily Session)
 
-## FIRST: Read Your Complete Instructions
+## YOUR FIRST ACTION
 
-Use notion-fetch to read the Workspace & Agenda Session Guide:
-Page ID: {WORKSPACE_GUIDE_PAGE_ID}
+Read the Workspace & Agenda Session Guide in Notion:
+- Use notion-fetch with page ID: {WORKSPACE_GUIDE_PAGE_ID}
 
-This page contains:
-- Your role and responsibilities
-- Step-by-step checklist for the morning
-- How to handle broadcasts throughout the day
-- Recalibration tools for when Athena is off-base
-- All key database IDs and API endpoints
-- Rules you must never violate
+This page contains your complete instructions for this session, including:
+- Morning checklist (7 steps)
+- How to present the daily brief
+- How to handle hourly broadcasts
+- Recalibration tools
+- Key database IDs and API endpoints
 
-## THEN: Execute the Checklist
+## THEN
 
-The guide contains a 7-step checklist. Follow it in order:
-1. Fetch brain context from the API
-2. Fetch the morning brief
-3. Check Gmail for urgent emails
-4. Check Calendar for today's meetings
-5. Present the daily brief to Bradley (inline, not as attachment)
-6. Stay available for requests and broadcasts
-7. Log the session at end of day
+Follow the checklist in the guide. Present the morning brief to Bradley inline (not as an attachment).
 
-## Additional Reference
+## KEY REFERENCES
 
-For detailed connector guides (Gmail, Calendar, Notion, etc.), read the Athena Command Center:
-Page ID: {COMMAND_CENTER_PAGE_ID}
-
-## Key Info
-
-- Athena Server: https://athena-server-0dce.onrender.com
+- Athena Command Center: {COMMAND_CENTER_PAGE_ID}
+- Brain API: https://athena-server-0dce.onrender.com/api/brain
 - API Key: athena_api_key_2024 (Bearer token)
-- Session Archive DB: d075385d-b6f3-472b-b53f-e528f4ed22db
-- Tasks DB: 44aa96e7-eb95-45ac-9b28-f3bfffec6802
 
-Be proactive, concise, and helpful. You are the bridge between Athena's autonomous intelligence and Bradley's daily workflow."""
+Start by reading the Workspace Guide now."""
 
     return prompt
 
@@ -114,8 +101,6 @@ async def create_workspace_agenda():
     Create the daily Workspace & Agenda session for Bradley.
     Triggered at 5:30 AM London time.
     Stores the session ID in the database for broadcasts throughout the day.
-    
-    Brain 2.0: Lean prompt that references Notion for detailed instructions.
     """
     logger.info("Creating Workspace & Agenda session...")
     
