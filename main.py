@@ -239,6 +239,22 @@ async def root():
     }
 
 
+# Public health endpoint (no auth required)
+@app.get("/api/health")
+async def public_health_check():
+    """Public health check endpoint."""
+    from db.neon import check_db_health
+    db_healthy = await check_db_health()
+    return {
+        "status": "healthy" if db_healthy else "degraded",
+        "timestamp": datetime.utcnow().isoformat(),
+        "components": {
+            "database": "ok" if db_healthy else "error",
+            "scheduler": "ok"
+        }
+    }
+
+
 # Include API routes
 app.include_router(api_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(brain_router, prefix="/api", dependencies=[Depends(verify_api_key)])

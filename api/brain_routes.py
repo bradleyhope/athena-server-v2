@@ -23,6 +23,7 @@ from db.brain import (
     get_workflow,
     update_workflow_execution,
     create_workflow,
+    get_preferences,
     # State
     get_context_window,
     set_context_window,
@@ -231,6 +232,17 @@ async def list_values():
 # =============================================================================
 # KNOWLEDGE ENDPOINTS
 # =============================================================================
+
+@router.get("/preferences")
+async def list_preferences(category: Optional[str] = None):
+    """Get all preferences, optionally filtered by category."""
+    try:
+        preferences = get_preferences(category)
+        return {"count": len(preferences), "preferences": preferences}
+    except Exception as e:
+        logger.error(f"Failed to get preferences: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/workflows")
 async def list_workflows(enabled_only: bool = True):
@@ -576,6 +588,35 @@ async def mark_feedback_as_processed(feedback_id: str, evolution_id: Optional[st
         raise
     except Exception as e:
         logger.error(f"Failed to mark feedback processed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# ALIAS ENDPOINTS (for convenience)
+# =============================================================================
+
+@router.get("/pending-actions")
+async def list_pending_actions_alias(
+    status: str = "pending",
+    priority: Optional[str] = None
+):
+    """Alias for /actions/pending - Get pending actions."""
+    try:
+        actions = get_pending_actions(status, priority)
+        return {"count": len(actions), "actions": actions}
+    except Exception as e:
+        logger.error(f"Failed to get pending actions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/evolution")
+async def list_evolution_proposals_alias(status: str = "proposed"):
+    """Alias for /evolution/proposals - Get evolution proposals."""
+    try:
+        proposals = get_evolution_proposals(status)
+        return {"count": len(proposals), "proposals": proposals}
+    except Exception as e:
+        logger.error(f"Failed to get evolution proposals: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

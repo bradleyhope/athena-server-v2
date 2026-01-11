@@ -894,3 +894,82 @@ def get_todays_impressions() -> List[Dict]:
             })
         
         return impressions
+
+
+
+# =============================================================================
+# PREFERENCES FUNCTIONS (KNOWLEDGE LAYER)
+# =============================================================================
+
+def get_preferences(category: str = None) -> List[Dict]:
+    """Get all preferences, optionally filtered by category."""
+    with db_cursor() as cursor:
+        if category:
+            cursor.execute("""
+                SELECT id, category, key, value, confidence, source, learned_from, created_at, updated_at
+                FROM preferences
+                WHERE category = %s
+                ORDER BY category, confidence DESC
+            """, (category,))
+        else:
+            cursor.execute("""
+                SELECT id, category, key, value, confidence, source, learned_from, created_at, updated_at
+                FROM preferences
+                ORDER BY category, confidence DESC
+            """)
+        rows = cursor.fetchall()
+        return [
+            {
+                "id": str(row['id']),
+                "category": row['category'],
+                "key": row['key'],
+                "value": row['value'],
+                "confidence": float(row['confidence']) if row['confidence'] else 0.5,
+                "source": row['source'],
+                "learned_from": row['learned_from'],
+                "created_at": row['created_at'].isoformat() if row['created_at'] else None,
+                "updated_at": row['updated_at'].isoformat() if row['updated_at'] else None,
+            }
+            for row in rows
+        ]
+
+
+def get_preference(category: str, key: str) -> Optional[Dict]:
+    """Get a specific preference by category and key."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT id, category, key, value, confidence, source, learned_from, created_at, updated_at
+            FROM preferences
+            WHERE category = %s AND key = %s
+        """, (category, key))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": str(row['id']),
+            "category": row['category'],
+            "key": row['key'],
+            "value": row['value'],
+            "confidence": float(row['confidence']) if row['confidence'] else 0.5,
+            "source": row['source'],
+            "learned_from": row['learned_from'],
+            "created_at": row['created_at'].isoformat() if row['created_at'] else None,
+            "updated_at": row['updated_at'].isoformat() if row['updated_at'] else None,
+        }
+
+
+def set_preference(category: str, key: str, value: str, confidence: float = 0.5, source: str = "manual", learned_from: str = None) -> str:
+    """Create or update a preference."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO preferences (category, key, value, confidence, source, learned_from)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (category, key) DO UPDATE SET
+                value = EXCLUDED.value,
+                confidence = EXCLUDED.confidence,
+                source = EXCLUDED.source,
+                learned_from = EXCLUDED.learned_from,
+                updated_at = NOW()
+            RETURNING id
+        """, (category, key, value, confidence, source, learned_from))
+        return str(cursor.fetchone()['id'])
