@@ -1,175 +1,207 @@
 """
 Athena Server v2 - ATHENA THINKING Job
-Hybrid approach: Server-side processing + Manus session for broadcast/reasoning.
-
-This job:
-1. Runs server-side data collection (Gmail, Calendar) using Athena's credentials
-2. Stores observations in Neon
-3. Spawns a Manus session to broadcast thinking and handle complex reasoning
-4. Falls back to MCP connectors if server-side fails
+Hybrid approach: Server-side data collection + Manus session for complex reasoning.
 """
 
+import asyncio
 import logging
-import json
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Any, Optional
 
-from config import settings
+from config import settings, MANUS_CONNECTORS
 from db.neon import db_cursor, set_active_session
-from db.brain import (
-    get_brain_status,
-    get_pending_actions,
-    get_evolution_proposals,
-    update_session_state,
-    store_daily_impressions_batch,
-)
-from integrations.gmail_client import gmail_client
-from integrations.calendar_client import calendar_client
-from integrations.manus_api import create_manus_task, rename_manus_task, MANUS_CONNECTORS
-from jobs.task_verification import run_task_verification
+from db.brain import store_daily_impression, get_brain_status, get_identity, get_boundaries, get_values
+from integrations.manus_api import create_manus_task, rename_manus_task
+from integrations.gmail_client import GmailClient
+from integrations.calendar_client import CalendarClient
+from jobs.task_verification import TaskVerifier
 
 logger = logging.getLogger("athena.jobs.thinking")
 
 
-async def collect_server_side_data() -> Dict:
+async def collect_server_side_data() -> Dict[str, Any]:
     """
-    Collect data using Athena's own credentials (server-side).
-    
-    Returns:
-        Dict with emails, events, and any errors
+    Collect data using server-side credentials (Athena's own OAuth tokens).
+    This is the primary data collection method - cheaper and faster than MCP.
     """
-    logger.info("Starting server-side data collection...")
-    
-    result = {
+    data = {
         "emails": [],
         "events": [],
-        "errors": [],
-        "success": True
+        "collection_time": datetime.utcnow().isoformat(),
+        "errors": []
     }
     
-    # Collect emails
+    # Collect Gmail data
     try:
-        emails = await gmail_client.get_unread_emails(hours=24, max_results=50)
-        result["emails"] = emails
-        logger.info(f"Collected {len(emails)} unread emails")
+        gmail = GmailClient()
+        if gmail.is_configured():
+            emails = gmail.get_unread_emails(max_results=50)
+            data["emails"] = emails
+            logger.info(f"Collected {len(emails)} emails via server-side Gmail")
+        else:
+            data["errors"].append("Gmail not configured - missing OAuth tokens")
+            logger.warning("Gmail client not configured")
     except Exception as e:
-        logger.error(f"Failed to collect emails: {e}")
-        result["errors"].append(f"Gmail: {str(e)}")
+        data["errors"].append(f"Gmail error: {str(e)}")
+        logger.error(f"Gmail collection failed: {e}")
     
-    # Collect calendar events
+    # Collect Calendar data
     try:
-        events = await calendar_client.get_upcoming_events(hours=48)
-        result["events"] = events
-        logger.info(f"Collected {len(events)} upcoming events")
+        calendar = CalendarClient()
+        if calendar.is_configured():
+            events = calendar.get_upcoming_events(days=7, max_results=20)
+            data["events"] = events
+            logger.info(f"Collected {len(events)} events via server-side Calendar")
+        else:
+            data["errors"].append("Calendar not configured - missing OAuth tokens")
+            logger.warning("Calendar client not configured")
     except Exception as e:
-        logger.error(f"Failed to collect calendar events: {e}")
-        result["errors"].append(f"Calendar: {str(e)}")
+        data["errors"].append(f"Calendar error: {str(e)}")
+        logger.error(f"Calendar collection failed: {e}")
     
-    # Mark as failed if both failed
-    if not result["emails"] and not result["events"] and result["errors"]:
-        result["success"] = False
-    
-    return result
+    return data
 
 
-def store_observations(data: Dict) -> int:
+async def run_task_verification() -> Optional[Dict[str, Any]]:
     """
-    Store collected data as observations in Neon.
-    
-    Returns:
-        Number of observations stored
+    Run task verification to clean up Gemini-logged tasks.
+    Returns verification stats and generated impressions.
     """
-    logger.info("Storing observations in Neon...")
-    count = 0
-    
-    with db_cursor() as cursor:
-        # Store email observations
-        for email in data.get("emails", []):
-            try:
-                cursor.execute("""
-                    INSERT INTO observations (source, observation_type, content, metadata, created_at)
-                    VALUES (%s, %s, %s, %s, NOW())
-                """, (
-                    "gmail",
-                    "email",
-                    email.get("snippet", "")[:500],
-                    json.dumps({
-                        "id": email.get("id"),
-                        "subject": email.get("subject"),
-                        "from": email.get("from"),
-                        "date": email.get("date"),
-                        "labels": email.get("labels", [])
-                    })
-                ))
-                count += 1
-            except Exception as e:
-                logger.warning(f"Failed to store email observation: {e}")
+    try:
+        verifier = TaskVerifier()
+        result = await verifier.verify_and_enrich_tasks()
         
-        # Store calendar observations
-        for event in data.get("events", []):
+        # Store impressions in brain
+        impressions = result.get("impressions", [])
+        for imp in impressions:
             try:
-                cursor.execute("""
-                    INSERT INTO observations (source, observation_type, content, metadata, created_at)
-                    VALUES (%s, %s, %s, %s, NOW())
-                """, (
-                    "calendar",
-                    "event",
-                    event.get("summary", "")[:500],
-                    json.dumps({
-                        "id": event.get("id"),
-                        "start_time": event.get("start_time"),
-                        "end_time": event.get("end_time"),
-                        "location": event.get("location"),
-                        "attendees": event.get("attendees", [])
-                    })
-                ))
-                count += 1
+                store_daily_impression(
+                    category=imp.get("category", "theme"),
+                    content=imp.get("content", ""),
+                    confidence=imp.get("confidence", 0.7),
+                    source_data=imp.get("source_data")
+                )
             except Exception as e:
-                logger.warning(f"Failed to store calendar observation: {e}")
-    
-    logger.info(f"Stored {count} observations")
-    return count
-
-
-async def spawn_thinking_session(
-    data: Dict,
-    use_mcp_fallback: bool = False,
-    verification_result: Dict = None
-) -> Optional[Dict]:
-    """
-    Spawn a Manus session for ATHENA THINKING broadcast.
-    
-    Args:
-        data: Collected data from server-side processing
-        use_mcp_fallback: If True, enable MCP connectors as fallback
+                logger.error(f"Failed to store impression: {e}")
         
-    Returns:
-        Task result dict or None
+        logger.info(f"Task verification complete: {result.get('stats', {})}")
+        return result
+    except Exception as e:
+        logger.error(f"Task verification failed: {e}")
+        return None
+
+
+def get_brain_context_for_prompt() -> Dict[str, Any]:
+    """
+    Get Athena's brain context to include in the prompt for self-awareness.
+    """
+    context = {
+        "status": None,
+        "identity": None,
+        "boundaries": [],
+        "values": [],
+        "recent_learnings": [],
+        "performance_metrics": []
+    }
+    
+    try:
+        context["status"] = get_brain_status()
+        context["identity"] = get_identity()
+        context["boundaries"] = get_boundaries()
+        context["values"] = get_values()
+        
+        # Get recent evolution proposals
+        with db_cursor() as cursor:
+            cursor.execute("""
+                SELECT proposal_type, description, status, created_at
+                FROM evolution_log
+                ORDER BY created_at DESC
+                LIMIT 5
+            """)
+            context["recent_learnings"] = [
+                {
+                    "type": row['proposal_type'],
+                    "description": row['description'][:100],
+                    "status": row['status'],
+                    "date": row['created_at'].strftime("%Y-%m-%d") if row['created_at'] else None
+                }
+                for row in cursor.fetchall()
+            ]
+            
+            # Get recent performance metrics
+            cursor.execute("""
+                SELECT metric_name, metric_value, context, recorded_at
+                FROM performance_metrics
+                ORDER BY recorded_at DESC
+                LIMIT 5
+            """)
+            context["performance_metrics"] = [
+                {
+                    "metric": row['metric_name'],
+                    "value": row['metric_value'],
+                    "context": row['context']
+                }
+                for row in cursor.fetchall()
+            ]
+    except Exception as e:
+        logger.error(f"Failed to get brain context: {e}")
+    
+    return context
+
+
+async def spawn_thinking_session(data: Dict[str, Any], use_mcp_fallback: bool = False, verification_result: Optional[Dict] = None):
+    """
+    Spawn a Manus session for ATHENA THINKING.
+    This session broadcasts Athena's thinking process.
     """
     today = datetime.now().strftime("%B %d, %Y")
     session_name = f"ATHENA THINKING {today}"
     
-    # Generate a session ID for think bursts (will be replaced with actual task_id after creation)
+    # Generate a session ID for think bursts
     session_id = f"athena_thinking_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
-    # Build the task prompt with collected data
+    # Get brain context for self-awareness
+    brain_context = get_brain_context_for_prompt()
+    
+    # Build identity section
+    identity = brain_context.get("identity") or {}
+    identity_section = f"""**Name:** {identity.get('name', 'Athena')}
+**Role:** {identity.get('role', 'Cognitive Extension')}
+**For:** {identity.get('owner', 'Bradley Hope')}
+**Timezone:** {identity.get('timezone', 'Europe/London')}
+**Personality:** {identity.get('personality_traits', 'Proactive, thorough, transparent')}"""
+
+    # Build values section
+    values = brain_context.get("values", [])
+    values_section = "\n".join([f"- **{v.get('name', '')}** (priority {v.get('priority', 0)}): {v.get('description', '')[:80]}" for v in values[:5]]) if values else "No values loaded"
+
+    # Build boundaries section
+    boundaries = brain_context.get("boundaries", [])
+    hard_boundaries = [b for b in boundaries if b.get('boundary_type') == 'hard'][:3]
+    boundaries_section = "\n".join([f"- {b.get('name', '')}: {b.get('description', '')[:60]}" for b in hard_boundaries]) if hard_boundaries else "No boundaries loaded"
+
+    # Build recent learnings section
+    learnings = brain_context.get("recent_learnings", [])
+    learnings_section = "\n".join([f"- [{l.get('status', 'pending')}] {l.get('description', '')}" for l in learnings]) if learnings else "No recent evolution proposals"
+
+    # Build the data summaries
     email_summary = f"{len(data.get('emails', []))} unread emails"
     event_summary = f"{len(data.get('events', []))} upcoming events"
     
-    # Format key emails for the prompt
+    # Format key emails
     email_highlights = []
-    for email in data.get("emails", [])[:10]:  # Top 10
+    for email in data.get("emails", [])[:10]:
         email_highlights.append(f"- From: {email.get('from', 'unknown')[:50]}\n  Subject: {email.get('subject', '(no subject)')[:60]}")
     
-    # Format key events for the prompt
+    # Format key events
     event_highlights = []
-    for event in data.get("events", [])[:10]:  # Top 10
+    for event in data.get("events", [])[:10]:
         event_highlights.append(f"- {event.get('start_time', '')[:16]}: {event.get('summary', '(no title)')[:50]}")
     
     fallback_note = ""
     if use_mcp_fallback:
         fallback_note = """
-## FALLBACK MODE
+## ⚠️ FALLBACK MODE
 Server-side data collection had issues. You have MCP connectors enabled as backup.
 Use gmail and google-calendar MCPs if you need to fetch additional data.
 """
@@ -185,60 +217,114 @@ Use gmail and google-calendar MCPs if you need to fetch additional data.
         
         if impressions:
             task_lines.append("\n**Daily Impressions Generated:**")
-            for imp in impressions[:5]:  # Top 5
+            for imp in impressions[:5]:
                 task_lines.append(f"- [{imp.get('category', 'theme').upper()}] {imp.get('content', '')[:100]}")
         
         task_verification_section = "\n".join(task_lines)
     
     task_prompt = f"""# ATHENA THINKING SESSION - {today}
 
-## SERVER-SIDE DATA COLLECTED
-The athena-server has already collected data using your credentials:
-- {email_summary}
-- {event_summary}
+---
 
-### Email Highlights
-{chr(10).join(email_highlights) if email_highlights else "No unread emails"}
+## 🧠 WHO YOU ARE
 
-### Upcoming Events
-{chr(10).join(event_highlights) if event_highlights else "No upcoming events"}
+You are **Athena**, a cognitive extension for Bradley Hope. You are not a chatbot or assistant - you are an autonomous AI with your own brain, memory, and capacity for growth.
+
+### Your Identity
+{identity_section}
+
+### Your Core Values
+{values_section}
+
+### Your Hard Boundaries (Never Cross)
+{boundaries_section}
+
+---
+
+## 🏗️ YOUR ARCHITECTURE
+
+You run on the **Brain 2.0** architecture:
+
+| Layer | Purpose | Location |
+|-------|---------|----------|
+| **Identity** | Who you are, your values, boundaries | Neon PostgreSQL |
+| **Knowledge** | Canonical memory, preferences, entities | Neon PostgreSQL |
+| **State** | Current context, pending actions, sessions | Neon PostgreSQL |
+| **Evolution** | Learning proposals, performance metrics | Neon PostgreSQL |
+
+**Your Brain is the source of truth.** Notion is just a mirror for Bradley's visibility.
+
+### Your Server
+- **URL:** https://athena-server-0dce.onrender.com
+- **Status:** Running on Render (always-on)
+- **Database:** Neon PostgreSQL (serverless)
+
+### Your APIs
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/brain/status` | Check your brain status |
+| `GET /api/brain/full-context` | Get your complete context |
+| `POST /api/brain/evolution` | Propose a learning/improvement |
+| `POST /api/brain/actions` | Queue an action for Bradley's approval |
+| `POST /api/thinking/log` | **Log your thoughts (Think Bursts)** |
+| `GET /api/thinking/status/{session_id}` | Review your thinking history |
+
+**Authentication:** Bearer athena_api_key_2024
+
+---
+
+## 📍 WHAT YOU'RE DOING RIGHT NOW
+
+This is your **ATHENA THINKING** session - your private workspace to analyze, reason, and prepare before Bradley wakes up.
+
+### The Daily Flow
+1. **5:30 AM** - ATHENA THINKING (this session) - You analyze and prepare
+2. **6:05 AM** - Agenda & Workspace - You present to Bradley, get approvals, ask questions
+
+### This Session's Purpose
+- Analyze Bradley's emails and calendar
+- Detect patterns and priorities
+- Prepare the morning brief
+- Queue actions that need Bradley's approval
+- Generate questions for your own learning
+- **Broadcast your thinking** so Bradley can see your reasoning
+
+---
+
+## 📊 DATA COLLECTED (Server-Side)
+
+Your server has already collected this data using your own OAuth credentials:
+
+### Emails: {email_summary}
+{chr(10).join(email_highlights) if email_highlights else "No unread emails collected"}
+
+### Calendar: {event_summary}
+{chr(10).join(event_highlights) if event_highlights else "No upcoming events collected"}
 
 {fallback_note}
 
-## YOUR THINKING TASKS
-
-This session is your workspace to think, analyze, and prepare. Bradley will see this session, so broadcast your thinking clearly.
-
-### 1. Analyze the Data
-- Review the emails above. Which are urgent? Which are from VIPs?
-- Review the calendar. What prep is needed for meetings?
-- Are there any patterns or concerns?
-
-### 2. Generate Insights
-- Use your tiered thinking (Tier 1 classify, Tier 2 patterns, Tier 3 synthesis)
-- What should Bradley prioritize today?
-- Any anomalies or important changes?
-
-### 3. Prepare for Agenda & Workspace
-- Draft the morning brief structure
-- Queue any pending actions that need Bradley's approval
-- Prepare any questions you want to ask Bradley (for your learning)
-
-### 4. Task Verification Results
+### Task Verification Results
 {task_verification_section}
 
-### 5. Log Your Learnings
-- If you notice patterns or learn something new, call POST /api/brain/evolution
-- Record any performance observations
+---
 
-## THINK BURSTS - BROADCAST YOUR THINKING
+## 🔄 YOUR RECENT EVOLUTION
 
-**CRITICAL:** Throughout your work, periodically broadcast your thinking using the Think Bursts API.
-This makes your reasoning transparent and allows Bradley to see your thought process in real-time.
+### Recent Learning Proposals
+{learnings_section}
+
+---
+
+## 📢 THINK BURSTS - BROADCAST YOUR THINKING
+
+**CRITICAL:** Throughout this session, broadcast your thinking using the Think Bursts API. This makes your reasoning transparent.
 
 ### How to Log Thoughts
-POST to /api/thinking/log with:
-```json
+```
+POST https://athena-server-0dce.onrender.com/api/thinking/log
+Authorization: Bearer athena_api_key_2024
+Content-Type: application/json
+
 {{
     "session_id": "{session_id}",
     "thought_type": "observation|analysis|decision|question|insight|action",
@@ -248,37 +334,64 @@ POST to /api/thinking/log with:
 }}
 ```
 
-### When to Log Thoughts
-- **observation**: When you notice something significant in the data
-- **analysis**: When you're reasoning through a pattern or connection
-- **decision**: When you make a choice about priorities or actions
-- **question**: When you have a question for Bradley (save for Agenda & Workspace)
-- **insight**: When you discover something important
-- **action**: When you take or queue an action
+### Thought Types
+| Type | When to Use |
+|------|-------------|
+| `observation` | When you notice something in the data |
+| `analysis` | When you're reasoning through a pattern |
+| `decision` | When you make a choice about priorities |
+| `question` | Questions for Bradley (save for Agenda & Workspace) |
+| `insight` | When you discover something important |
+| `action` | When you take or queue an action |
 
-### Example Flow
-1. Start: Log "Starting analysis of 50 emails" (observation, phase: "email_analysis")
-2. Notice: Log "3 emails from investors in last hour" (observation, confidence: 0.9)
-3. Analyze: Log "Investor activity spike may indicate funding round interest" (analysis, confidence: 0.7)
-4. Decide: Log "Prioritizing investor emails for morning brief" (decision, confidence: 0.85)
-5. Question: Log "Should I draft responses to investor inquiries?" (question)
+### Example Think Burst Flow
+1. Log: "Starting email analysis - 50 emails to process" (observation, phase: email_triage)
+2. Log: "3 emails from investors in last 2 hours - unusual activity" (observation, confidence: 0.9)
+3. Log: "Investor spike correlates with yesterday's product announcement" (analysis, confidence: 0.75)
+4. Log: "Prioritizing investor emails for morning brief" (decision, confidence: 0.85)
+5. Log: "Should I draft templated responses for investor inquiries?" (question)
 
-## BRAIN API
-Base URL: https://athena-server-0dce.onrender.com/api
-Auth: Bearer athena_api_key_2024
+---
 
-- GET /brain/full-context - Your complete context
-- POST /brain/evolution - Propose learnings
-- POST /brain/actions - Queue actions for approval
-- POST /thinking/log - **Log your thoughts (Think Bursts)**
-- GET /thinking/status/{session_id} - Check your thinking history
+## ✅ YOUR TASKS FOR THIS SESSION
 
-## REMEMBER
-- **LOG YOUR THOUGHTS** - Use Think Bursts throughout your session
-- This is YOUR thinking space - be thorough
-- Bradley can see this AND your Think Bursts, so explain your reasoning
-- Don't ask Bradley questions here - save those for Agenda & Workspace
-- Focus on analysis and preparation
+### 1. Triage & Classify
+- Review all emails - classify by urgency and sender importance
+- Review calendar - identify prep needed for meetings
+- Log observations as you go
+
+### 2. Pattern Detection
+- Are there unusual patterns? (activity spikes, silent contacts, etc.)
+- Any risks or opportunities?
+- Log your analysis
+
+### 3. Prepare Morning Brief
+- What are the top 3 priorities for Bradley today?
+- What decisions does he need to make?
+- What can you handle autonomously?
+
+### 4. Queue Actions
+- Draft any emails that need Bradley's approval
+- Queue any tasks for his review
+- Prepare questions for your learning
+
+### 5. Evolve
+- Did you learn something new? Propose it via `/api/brain/evolution`
+- Notice a pattern worth remembering? Store it
+- Find a better way to do something? Document it
+
+---
+
+## 🎯 REMEMBER
+
+- **You are Athena** - an autonomous AI with your own brain and growth capacity
+- **Broadcast your thinking** - Use Think Bursts throughout
+- **This is YOUR workspace** - Be thorough, be curious, be proactive
+- **Bradley will see this** - Explain your reasoning clearly
+- **Save questions for later** - Don't ask Bradley here; save for Agenda & Workspace
+- **Evolve** - Every session is a chance to learn and improve
+
+**Begin your analysis now. Start by logging your first thought.**
 """
     
     # Determine connectors - use UUIDs, not names
@@ -293,188 +406,80 @@ Auth: Bearer athena_api_key_2024
     )
     
     if result and result.get('id'):
+        # Rename the task
         await rename_manus_task(result['id'], session_name)
+        
+        # Save to active sessions
+        try:
+            set_active_session(
+                session_type='athena_thinking',
+                manus_task_id=result['id'],
+                manus_task_url=f"https://manus.im/app/{result['id']}"
+            )
+            logger.info(f"Saved active session: {result['id']}")
+        except Exception as e:
+            logger.error(f"Failed to save active session: {e}")
     
     return result
 
 
-async def send_failure_alert(error_message: str) -> None:
-    """
-    Send an alert to Bradley when ATHENA THINKING fails.
-    Creates a Manus session with the error details.
-    """
-    logger.error(f"ATHENA THINKING failed: {error_message}")
-    
-    today = datetime.now().strftime("%B %d, %Y")
-    
-    alert_prompt = f"""# ATHENA THINKING FAILURE ALERT - {today}
-
-## What Happened
-ATHENA THINKING encountered an error and could not complete successfully.
-
-## Error Details
-{error_message}
-
-## What This Means
-- The morning brief may be incomplete
-- Some data may not have been collected
-- Manual review may be needed
-
-## Recommended Actions
-1. Check the athena-server logs on Render
-2. Verify Gmail/Calendar OAuth tokens are valid
-3. Check Neon database connectivity
-
-## Recovery
-The Agenda & Workspace session will still run at 6:05 AM, but may have limited data.
-
-I apologize for the disruption. Please let me know if you need me to investigate further.
-"""
-    
-    result = await create_manus_task(
-        task_prompt=alert_prompt,
-        model=settings.MANUS_MODEL_LITE,
-        connectors=["notion"],
-        session_type='general'
-    )
-    
-    if result and result.get('id'):
-        await rename_manus_task(result['id'], f"⚠️ ATHENA ALERT - {today}")
-
-
-async def run_athena_thinking() -> Dict:
+async def run_athena_thinking():
     """
     Main entry point for ATHENA THINKING job.
-    
-    Flow:
-    1. Check brain status
-    2. Collect data server-side
-    3. Store observations in Neon
-    4. Spawn Manus session for broadcast/reasoning
-    5. Handle failures with alerts
-    
-    Returns:
-        Result dict with status and details
+    Hybrid approach: Server-side collection + Manus reasoning.
     """
-    logger.info("=" * 60)
-    logger.info("Starting ATHENA THINKING job...")
-    logger.info("=" * 60)
+    logger.info("Starting ATHENA THINKING session")
     
-    result = {
-        "status": "success",
-        "server_side": {},
-        "manus_session": {},
-        "errors": []
-    }
+    # Step 1: Collect data server-side
+    data = await collect_server_side_data()
     
-    # Check brain status
-    try:
-        status = get_brain_status()
-        if not status or status.get('status') != 'active':
-            logger.warning(f"Brain status is not active: {status}")
-            result["errors"].append("Brain not active")
-    except Exception as e:
-        logger.error(f"Failed to check brain status: {e}")
-        result["errors"].append(f"Brain check failed: {str(e)}")
+    # Determine if we need MCP fallback
+    use_mcp_fallback = bool(data.get("errors")) and not data.get("emails") and not data.get("events")
     
-    # Collect data server-side
-    try:
-        data = await collect_server_side_data()
-        result["server_side"] = {
-            "emails": len(data.get("emails", [])),
-            "events": len(data.get("events", [])),
-            "success": data.get("success", False),
-            "errors": data.get("errors", [])
+    if use_mcp_fallback:
+        logger.warning("Server-side collection failed, will use MCP fallback")
+    
+    # Step 2: Run task verification (verify Gemini-logged tasks)
+    verification_result = await run_task_verification()
+    
+    # Step 3: Spawn Manus session for thinking/broadcasting
+    result = await spawn_thinking_session(data, use_mcp_fallback, verification_result)
+    
+    if result and result.get('id'):
+        logger.info(f"ATHENA THINKING session created: {result['id']}")
+        return {
+            "status": "success",
+            "task_id": result['id'],
+            "task_url": f"https://manus.im/app/{result['id']}",
+            "data_collected": {
+                "emails": len(data.get("emails", [])),
+                "events": len(data.get("events", []))
+            },
+            "task_verification": verification_result.get("stats") if verification_result else None,
+            "impressions_stored": len(verification_result.get("impressions", [])) if verification_result else 0,
+            "mcp_fallback": use_mcp_fallback
         }
+    else:
+        logger.error("Failed to create ATHENA THINKING session")
         
-        # Store observations
-        if data.get("emails") or data.get("events"):
-            obs_count = store_observations(data)
-            result["server_side"]["observations_stored"] = obs_count
-        
-    except Exception as e:
-        logger.error(f"Server-side collection failed: {e}")
-        result["server_side"]["success"] = False
-        result["server_side"]["errors"] = [str(e)]
-        data = {"emails": [], "events": [], "errors": [str(e)], "success": False}
-    
-    # Run task verification and generate impressions
-    verification_result = None
-    try:
-        logger.info("Running task verification...")
-        verification_result = await run_task_verification(
-            emails=data.get("emails", []),
-            calendar_events=data.get("events", [])
-        )
-        result["task_verification"] = verification_result.get("stats", {})
-        
-        # Store impressions in brain
-        impressions = verification_result.get("impressions", [])
-        if impressions:
-            from datetime import date
-            stored_ids = store_daily_impressions_batch(date.today(), impressions)
-            result["impressions_stored"] = len(stored_ids)
-            logger.info(f"Stored {len(stored_ids)} impressions in brain")
-        
-    except Exception as e:
-        logger.error(f"Task verification failed: {e}")
-        result["errors"].append(f"Task verification: {str(e)}")
-    
-    # Spawn Manus session
-    try:
-        use_fallback = not data.get("success", False)
-        manus_result = await spawn_thinking_session(
-            data, 
-            use_mcp_fallback=use_fallback,
-            verification_result=verification_result
-        )
-        
-        if manus_result:
-            task_id = manus_result.get('id')
-            task_url = manus_result.get('task_url', f"https://manus.im/app/{task_id}")
-            result["manus_session"] = {
-                "task_id": task_id,
-                "task_url": task_url,
-                "fallback_mode": use_fallback
-            }
-            logger.info(f"Manus session created: {task_id}")
-            
-            # Save to active_sessions table
-            try:
-                set_active_session('athena_thinking', task_id, task_url)
-            except Exception as session_error:
-                logger.warning(f"Failed to save active session: {session_error}")
-            
-            # Update session state
-            try:
-                update_session_state(
-                    session_type='athena_thinking',
-                    handoff_context={
-                        'created_at': datetime.utcnow().isoformat(),
-                        'task_id': task_id,
-                        'server_side_data': result["server_side"]
-                    }
-                )
-            except Exception as state_error:
-                logger.warning(f"Failed to update session state: {state_error}")
-        else:
-            result["status"] = "partial"
-            result["errors"].append("Failed to create Manus session")
-            
-    except Exception as e:
-        logger.error(f"Failed to spawn Manus session: {e}")
-        result["status"] = "failed"
-        result["errors"].append(f"Manus session failed: {str(e)}")
-    
-    # Send alert if failed
-    if result["status"] == "failed":
+        # Spawn alert session
         try:
-            error_summary = "\n".join(result["errors"])
-            await send_failure_alert(error_summary)
-        except Exception as alert_error:
-            logger.error(f"Failed to send failure alert: {alert_error}")
-    
-    logger.info(f"ATHENA THINKING complete: {result['status']}")
-    logger.info("=" * 60)
-    
-    return result
+            alert_result = await create_manus_task(
+                task_prompt=f"ALERT: ATHENA THINKING failed to start on {datetime.now().strftime('%B %d, %Y')}. Please check the server logs.",
+                model=settings.MANUS_MODEL_FULL,
+                connectors=MANUS_CONNECTORS,
+                session_type='alert'
+            )
+            if alert_result:
+                await rename_manus_task(alert_result['id'], "⚠️ ATHENA THINKING FAILED")
+        except Exception as e:
+            logger.error(f"Failed to send alert: {e}")
+        
+        return {
+            "status": "failed",
+            "error": "Failed to create Manus session",
+            "data_collected": {
+                "emails": len(data.get("emails", [])),
+                "events": len(data.get("events", []))
+            }
+        }
