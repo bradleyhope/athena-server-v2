@@ -182,6 +182,14 @@ def apply_evolution(proposal: dict) -> dict:
         elif category == 'preference':
             # Add or update preference
             with db_cursor() as cursor:
+                # Serialize value to JSON string if it's not already
+                value = change_data.get('value')
+                if not isinstance(value, str):
+                    value = json.dumps(value)
+                elif not (value.startswith('{') or value.startswith('[') or value.startswith('"')):
+                    # Wrap plain strings in quotes for valid JSON
+                    value = json.dumps(value)
+                
                 cursor.execute("""
                     INSERT INTO preferences (category, key, value, source, confidence)
                     VALUES (%s, %s, %s, %s, %s)
@@ -192,7 +200,7 @@ def apply_evolution(proposal: dict) -> dict:
                 """, (
                     change_data.get('category', 'general'),
                     change_data.get('key'),
-                    change_data.get('value'),
+                    value,
                     'evolution_engine',
                     change_data.get('confidence', 0.8)
                 ))
