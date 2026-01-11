@@ -21,10 +21,12 @@ from db.brain import (
     get_pending_actions,
     get_evolution_proposals,
     update_session_state,
+    store_daily_impressions_batch,
 )
 from integrations.gmail_client import gmail_client
 from integrations.calendar_client import calendar_client
 from integrations.manus_api import create_manus_task, rename_manus_task, MANUS_CONNECTORS
+from jobs.task_verification import run_task_verification
 
 logger = logging.getLogger("athena.jobs.thinking")
 
@@ -131,7 +133,8 @@ def store_observations(data: Dict) -> int:
 
 async def spawn_thinking_session(
     data: Dict,
-    use_mcp_fallback: bool = False
+    use_mcp_fallback: bool = False,
+    verification_result: Dict = None
 ) -> Optional[Dict]:
     """
     Spawn a Manus session for ATHENA THINKING broadcast.
@@ -168,6 +171,22 @@ Server-side data collection had issues. You have MCP connectors enabled as backu
 Use gmail and google-calendar MCPs if you need to fetch additional data.
 """
     
+    # Build task verification section
+    task_verification_section = "No task verification data available."
+    if verification_result:
+        stats = verification_result.get("stats", {})
+        impressions = verification_result.get("impressions", [])
+        
+        task_lines = []
+        task_lines.append(f"Tasks verified: {stats.get('total', 0)} (Kept: {stats.get('kept', 0)}, Discarded: {stats.get('discarded', 0)})")
+        
+        if impressions:
+            task_lines.append("\n**Daily Impressions Generated:**")
+            for imp in impressions[:5]:  # Top 5
+                task_lines.append(f"- [{imp.get('category', 'theme').upper()}] {imp.get('content', '')[:100]}")
+        
+        task_verification_section = "\n".join(task_lines)
+    
     task_prompt = f"""# ATHENA THINKING SESSION - {today}
 
 ## SERVER-SIDE DATA COLLECTED
@@ -202,7 +221,10 @@ This session is your workspace to think, analyze, and prepare. Bradley will see 
 - Queue any pending actions that need Bradley's approval
 - Prepare any questions you want to ask Bradley (for your learning)
 
-### 4. Log Your Learnings
+### 4. Task Verification Results
+{task_verification_section}
+
+### 5. Log Your Learnings
 - If you notice patterns or learn something new, call POST /api/brain/evolution
 - Record any performance observations
 
@@ -337,10 +359,36 @@ async def run_athena_thinking() -> Dict:
         result["server_side"]["errors"] = [str(e)]
         data = {"emails": [], "events": [], "errors": [str(e)], "success": False}
     
+    # Run task verification and generate impressions
+    verification_result = None
+    try:
+        logger.info("Running task verification...")
+        verification_result = await run_task_verification(
+            emails=data.get("emails", []),
+            calendar_events=data.get("events", [])
+        )
+        result["task_verification"] = verification_result.get("stats", {})
+        
+        # Store impressions in brain
+        impressions = verification_result.get("impressions", [])
+        if impressions:
+            from datetime import date
+            stored_ids = store_daily_impressions_batch(date.today(), impressions)
+            result["impressions_stored"] = len(stored_ids)
+            logger.info(f"Stored {len(stored_ids)} impressions in brain")
+        
+    except Exception as e:
+        logger.error(f"Task verification failed: {e}")
+        result["errors"].append(f"Task verification: {str(e)}")
+    
     # Spawn Manus session
     try:
         use_fallback = not data.get("success", False)
-        manus_result = await spawn_thinking_session(data, use_mcp_fallback=use_fallback)
+        manus_result = await spawn_thinking_session(
+            data, 
+            use_mcp_fallback=use_fallback,
+            verification_result=verification_result
+        )
         
         if manus_result:
             task_id = manus_result.get('id')

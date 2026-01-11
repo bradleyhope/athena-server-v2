@@ -753,3 +753,144 @@ def record_performance_metric(
         period_end=now,
         dimensions={'unit': metric_unit, 'context': context or {}}
     )
+
+
+# =============================================================================
+# DAILY IMPRESSIONS
+# =============================================================================
+
+def store_daily_impression(
+    impression_date: date,
+    category: str,
+    content: str,
+    confidence: float = 0.8,
+    source_data: Dict = None
+) -> str:
+    """
+    Store a daily impression in synthesis_memory.
+    
+    Args:
+        impression_date: Date of the impression
+        category: relationship|opportunity|risk|theme
+        content: The impression text
+        confidence: Confidence score 0.0-1.0
+        source_data: Source emails/events that led to this impression
+        
+    Returns:
+        Memory ID
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO synthesis_memory (
+                synthesis_type, content, confidence_score, 
+                source_observations, created_at
+            ) VALUES (%s, %s, %s, %s, NOW())
+            RETURNING id
+        """, (
+            f"impression_{category}",
+            json.dumps({
+                "date": impression_date.isoformat(),
+                "category": category,
+                "content": content,
+                "confidence": confidence
+            }),
+            confidence,
+            json.dumps(source_data) if source_data else None
+        ))
+        result = cursor.fetchone()
+        logger.info(f"Stored daily impression: {category}")
+        return str(result['id'])
+
+
+def store_daily_impressions_batch(impression_date: date, impressions: List[Dict]) -> List[str]:
+    """
+    Store multiple impressions at once.
+    
+    Args:
+        impression_date: Date of the impressions
+        impressions: List of impression dicts with category, content, confidence
+        
+    Returns:
+        List of memory IDs
+    """
+    ids = []
+    for imp in impressions:
+        imp_id = store_daily_impression(
+            impression_date=impression_date,
+            category=imp.get("category", "theme"),
+            content=imp.get("content", ""),
+            confidence=imp.get("confidence", 0.8),
+            source_data=imp.get("sources")
+        )
+        ids.append(imp_id)
+    return ids
+
+
+def get_recent_impressions(days: int = 7, category: str = None) -> List[Dict]:
+    """
+    Get recent impressions from synthesis_memory.
+    
+    Args:
+        days: Number of days to look back
+        category: Optional filter by category
+        
+    Returns:
+        List of impression records
+    """
+    with db_cursor() as cursor:
+        query = """
+            SELECT id, content, confidence_score, created_at
+            FROM synthesis_memory
+            WHERE synthesis_type LIKE 'impression_%'
+            AND created_at > NOW() - INTERVAL '%s days'
+        """
+        params = [days]
+        
+        if category:
+            query += " AND synthesis_type = %s"
+            params.append(f"impression_{category}")
+        
+        query += " ORDER BY created_at DESC"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        impressions = []
+        for row in rows:
+            content = json.loads(row['content']) if isinstance(row['content'], str) else row['content']
+            impressions.append({
+                "id": str(row['id']),
+                "date": content.get("date"),
+                "category": content.get("category"),
+                "content": content.get("content"),
+                "confidence": row['confidence_score'],
+                "created_at": row['created_at'].isoformat() if row['created_at'] else None
+            })
+        
+        return impressions
+
+
+def get_todays_impressions() -> List[Dict]:
+    """Get impressions from today."""
+    today = date.today()
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT id, content, confidence_score, created_at
+            FROM synthesis_memory
+            WHERE synthesis_type LIKE 'impression_%'
+            AND DATE(created_at) = %s
+            ORDER BY created_at DESC
+        """, (today,))
+        rows = cursor.fetchall()
+        
+        impressions = []
+        for row in rows:
+            content = json.loads(row['content']) if isinstance(row['content'], str) else row['content']
+            impressions.append({
+                "id": str(row['id']),
+                "category": content.get("category"),
+                "content": content.get("content"),
+                "confidence": row['confidence_score']
+            })
+        
+        return impressions
