@@ -1,111 +1,89 @@
-# Athena Server v2
+# Athena Server v2 - Brain 2.0
 
-Cognitive Extension System for Bradley Hope - FastAPI server implementing the three-tier thinking model.
+This is the backend server for Athena 2.0, a cognitive extension system built on a four-layer brain architecture. The server is a FastAPI application that provides a three-tier thinking model, a comprehensive Brain API, and a series of scheduled jobs for continuous learning and system maintenance.
 
-## Architecture
+## Brain 2.0 Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    athena-server (Brain)                                     │
-│  • Tier 1/2/3 thinking loops                                                │
-│  • Scheduled via APScheduler (burst every 15-30 min)                        │
-│  • Direct AI model calls (OpenAI, Anthropic)                                │
-└─────────────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    Neon PostgreSQL (Truth)                                   │
-│  • Observations, patterns, synthesis_memory                                 │
-│  • Canonical memory (approval-only)                                         │
-│  • Email drafts, session state, emergency controls                          │
-└─────────────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    Manus Sessions (Hands)                                    │
-│  • ATHENA THINKING [Date]: Athena's workspace                               │
-│  • Agenda & Workspace - [Date]: Bradley's daily session                     │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+The core of Athena 2.0 is its brain, a Neon PostgreSQL database that serves as the single source of truth. This architecture transforms Athena from a Notion-dependent system into a truly intelligent agent with its own memory and reasoning capabilities. The brain is organized into four distinct layers:
 
-## Three-Tier Thinking Model
+### 1. Identity Layer
 
-| Tier | Model | Frequency | Purpose |
-|------|-------|-----------|---------|
-| **Tier 1** | GPT-5 nano | Every 30 min | Classify observations |
-| **Tier 2** | Claude Haiku 4.5 | Every 2 hours | Detect patterns |
-| **Tier 3** | Claude Sonnet 4.5 | 4x daily | Deep synthesis |
+This layer defines Athena's core being and operational parameters.
+
+- **`core_identity`**: Athena's name, role, version, and core personality traits.
+- **`boundaries`**: Hard, soft, and contextual rules that govern Athena's behavior (e.g., "never send emails autonomously").
+- **`values`**: Prioritized principles that guide decision-making in ambiguous situations (e.g., "User Sovereignty," "Proactive Assistance").
+
+### 2. Knowledge Layer
+
+This layer stores learned information and operational procedures.
+
+- **`canonical_memory`**: User-approved facts about the world.
+- **`workflows`**: Step-by-step procedures for accomplishing tasks (e.g., "morning_brief").
+- **`preferences`**: Learned user preferences.
+- **`entities`**: Information about people, places, and organizations.
+
+### 3. State Layer
+
+This layer manages the dynamic state of the system during operation.
+
+- **`context_windows`**: Active context for ongoing conversations and tasks.
+- **`pending_actions`**: Actions awaiting user approval or execution.
+- **`session_state`**: Persistent state across Manus sessions.
+
+### 4. Evolution Layer
+
+This layer enables Athena to learn and improve over time.
+
+- **`evolution_log`**: A record of all proposed and applied system changes.
+- **`performance_metrics`**: Data on system performance and efficiency.
+- **`feedback_history`**: A log of all user feedback for learning and adaptation.
+
+## Brain API
+
+The server exposes a comprehensive Brain API at `/api/brain/*` for interacting with all four layers of the brain. This API allows Manus sessions to read from and write to Athena's brain, enabling a tight integration between the agent and its memory.
+
+Key endpoints include:
+
+- `/api/brain/full-context`: Get the complete brain context for a Manus session.
+- `/api/brain/identity`: Read and update Athena's core identity.
+- `/api/brain/boundaries/check`: Check if an action is allowed by the defined boundaries.
+- `/api/brain/workflows`: List and manage workflows.
+- `/api/brain/actions`: Create and manage pending actions.
+- `/api/brain/evolution`: Propose and manage system evolutions.
 
 ## Scheduled Jobs
 
-| Job | Schedule (London) | Description |
-|-----|-------------------|-------------|
-| Observation Burst | Every 30 min | Poll Gmail/Calendar, classify |
-| Pattern Detection | Every 2 hours | Analyze observations |
-| Synthesis | 6am, 12pm, 6pm, 10pm | Generate insights |
-| ATHENA THINKING | 6:00 AM | Athena's workspace session |
-| Agenda & Workspace | 6:05 AM | Bradley's morning brief |
-| Overnight Learning | Midnight-5 AM | Read historical data |
-| Weekly Rebuild | Sunday midnight | Fresh synthesis |
+The server runs a series of scheduled jobs to automate learning, synthesis, and maintenance:
 
-## API Endpoints
+- **Observation Burst** (every 30 mins): Gathers new information from various sources.
+- **Pattern Detection** (every 2 hours): Identifies patterns in the collected observations.
+- **Synthesis** (4x daily): Synthesizes new knowledge and proposes actions.
+- **Morning Sessions** (6:00/6:05 AM London): Creates the "ATHENA THINKING" and "Agenda & Workspace" Notion pages.
+- **Overnight Learning** (midnight-5am): Performs deep learning tasks.
+- **Weekly Rebuild** (Sunday midnight): Rebuilds the synthesis memory.
+- **Notion Sync** (every 4 hours): Mirrors the brain state to Notion for user visibility.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Health check |
-| `/api/health` | GET | Detailed health status |
-| `/api/brief` | GET | Morning brief data |
-| `/api/observations` | GET | Recent observations |
-| `/api/patterns` | GET | Detected patterns |
-| `/api/synthesis` | GET | Latest synthesis |
-| `/api/drafts` | GET | Pending email drafts |
-| `/api/trigger/observation` | POST | Manual observation burst |
-| `/api/trigger/pattern` | POST | Manual pattern detection |
-| `/api/trigger/synthesis` | POST | Manual synthesis |
-| `/api/trigger/morning-sessions` | POST | Create morning sessions |
+## Getting Started
 
-## Setup
+### 1. Environment Variables
 
-1. Clone the repository
-2. Copy `.env.example` to `.env` and fill in values
-3. Install dependencies: `pip install -r requirements.txt`
-4. Run locally: `uvicorn main:app --reload --port 3001`
+Copy `.env.example` to `.env` and fill in the required values, especially `DATABASE_URL` and `ATHENA_API_KEY`.
 
-## Deployment
+### 2. Database Migration
 
-Deploy to Render using the included `render.yaml`:
+To set up the Brain 2.0 schema, run the migration script:
 
 ```bash
-# Push to GitHub
-git push origin main
-
-# Render will auto-deploy from the render.yaml configuration
+python3 migrations/run_brain_2_0_migration.py
 ```
 
-## Environment Variables
+### 3. Running the Server
 
-See `.env.example` for all required variables.
+To run the server locally:
 
-## Canonical Notion Pages
+```bash
+uvicorn main:app --reload
+```
 
-Athena reads these pages at session start:
-
-| Page | ID |
-|------|----|
-| Athena Command Center | `2e3d44b3-a00b-81ab-bbda-ced57f8c345d` |
-| Athena Canonical Memory | `2e4d44b3-a00b-810e-9ac1-cbd30e209fab` |
-| Athena VIP Contacts | `2e4d44b3-a00b-8112-8eb2-ef28cec19ae6` |
-| Athena Policies & Rules | `2e4d44b3-a00b-813c-a564-c7950f0db4a5` |
-
-## AI Model IDs (January 2026)
-
-| Model | API ID |
-|-------|--------|
-| GPT-5 nano | `gpt-5-nano` |
-| Claude Haiku 4.5 | `claude-haiku-4-5-20251001` |
-| Claude Sonnet 4.5 | `claude-sonnet-4-5-20250929` |
-| Manus 1.6 | `manus-1.6` |
-| Manus 1.6 Lite | `manus-1.6-lite` |
-
-<- Fixed observations endpoint to use source_type Deployment trigger: 20260111043602 -->
-<- Fixed observations endpoint to use source_type Fixed DATABASE_URL: 20260111044522 -->
+The server will be available at `http://localhost:3001`.
