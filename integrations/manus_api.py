@@ -104,6 +104,9 @@ async def create_manus_task(
             
             if response.status_code == 200 or response.status_code == 201:
                 result = response.json()
+                # Normalize response - API returns task_id, we use id internally
+                if 'task_id' in result and 'id' not in result:
+                    result['id'] = result['task_id']
                 logger.info(f"Created Manus task: {result.get('id')} (session_type: {session_type})")
                 return result
             else:

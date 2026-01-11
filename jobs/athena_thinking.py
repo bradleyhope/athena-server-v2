@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from config import settings
-from db.neon import db_cursor
+from db.neon import db_cursor, set_active_session
 from db.brain import (
     get_brain_status,
     get_pending_actions,
@@ -392,12 +392,19 @@ async def run_athena_thinking() -> Dict:
         
         if manus_result:
             task_id = manus_result.get('id')
+            task_url = manus_result.get('task_url', f"https://manus.im/app/{task_id}")
             result["manus_session"] = {
                 "task_id": task_id,
-                "task_url": f"https://manus.im/app/{task_id}",
+                "task_url": task_url,
                 "fallback_mode": use_fallback
             }
             logger.info(f"Manus session created: {task_id}")
+            
+            # Save to active_sessions table
+            try:
+                set_active_session('athena_thinking', task_id, task_url)
+            except Exception as session_error:
+                logger.warning(f"Failed to save active session: {session_error}")
             
             # Update session state
             try:
