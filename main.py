@@ -37,6 +37,7 @@ from apscheduler.triggers.cron import CronTrigger
 from config import settings
 from db.neon import get_db_connection, check_db_health
 from api.routes import router as api_router
+from api.brain_routes import router as brain_router
 
 # Configure logging
 logging.basicConfig(
@@ -123,6 +124,7 @@ def setup_scheduled_jobs():
     from jobs.morning_sessions import create_athena_thinking, create_agenda_workspace
     from jobs.overnight_learning import run_overnight_learning
     from jobs.weekly_rebuild import run_weekly_rebuild
+    from jobs.notion_sync import run_notion_sync
     
     # Observation burst - every 30 minutes
     scheduler.add_job(
@@ -187,6 +189,15 @@ def setup_scheduled_jobs():
         replace_existing=True
     )
     
+    # Notion sync - every 4 hours (brain → Notion mirror)
+    scheduler.add_job(
+        run_notion_sync,
+        CronTrigger(hour="*/4", minute=45),
+        id="notion_sync",
+        name="Notion Sync (Brain Mirror)",
+        replace_existing=True
+    )
+    
     logger.info("Scheduled jobs configured")
 
 
@@ -218,6 +229,7 @@ async def root():
 
 # Include API routes
 app.include_router(api_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(brain_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 
 
 if __name__ == "__main__":
