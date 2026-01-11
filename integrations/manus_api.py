@@ -52,7 +52,8 @@ Key principles:
 
 
 async def create_manus_task(
-    task_prompt: str,
+    prompt: str = None,
+    task_prompt: str = None,
     model: str = None,
     connectors: list = None,
     session_type: str = 'general'
@@ -73,6 +74,12 @@ async def create_manus_task(
         logger.error("MANUS_API_KEY not configured")
         return None
     
+    # Support both 'prompt' and 'task_prompt' parameter names
+    actual_prompt = prompt or task_prompt
+    if not actual_prompt:
+        logger.error("No prompt provided to create_manus_task")
+        return None
+    
     model = model or settings.MANUS_MODEL_FULL
     connectors = connectors or MANUS_CONNECTORS
     
@@ -81,7 +88,7 @@ async def create_manus_task(
     
     # Combine system prompt and task prompt into single prompt
     # Manus API uses 'prompt' field, not 'system_prompt' + 'task_prompt'
-    full_prompt = f"{system_prompt}\n\n---\n\n{task_prompt}"
+    full_prompt = f"{system_prompt}\n\n---\n\n{actual_prompt}"
     
     payload = {
         "model": model,

@@ -1,44 +1,44 @@
 """
 Athena Server v2 - Hourly Broadcast Job
-Sends detailed thought transmissions every hour to:
-1. The active Manus session (Workspace & Agenda)
-2. The Athena Broadcasts Notion database
+Sends detailed thought transmissions every hour by:
+1. Spawning a NEW Manus task with the broadcast (during active hours only)
+2. Logging to the Athena Broadcasts Notion database (always)
+
+Active hours: 5:30 AM - 10:30 PM London time
+Outside active hours: Bursts are generated and stored in Notion but not broadcast to Manus
 """
 
 import asyncio
 import logging
 import json
 import httpx
-from datetime import datetime, timedelta
+from datetime import datetime, time
 from typing import Dict, Any, Optional, List
+import pytz
 
-from config import settings
+from config import settings, MANUS_CONNECTORS
 from db.neon import db_cursor, get_active_session
 from db.brain import (
     get_brain_status, get_continuous_state_context,
     get_recent_observations, get_recent_patterns
 )
+from integrations.manus_api import create_manus_task
 
 logger = logging.getLogger("athena.jobs.hourly_broadcast")
 
 # Athena Broadcasts database ID
 BROADCASTS_DATABASE_ID = "70b8cb6eff9845d98492ce16c4e2e9aa"
 
+# Active broadcast hours (London time)
+BROADCAST_START = time(5, 30)   # 5:30 AM
+BROADCAST_END = time(22, 30)    # 10:30 PM
 
-async def get_active_workspace_session() -> Optional[Dict[str, Any]]:
-    """Get the currently active Workspace & Agenda session."""
-    try:
-        session = get_active_session("workspace_agenda")
-        if session:
-            return {
-                "task_id": session.get("manus_task_id"),
-                "task_url": session.get("manus_task_url"),
-                "session_date": session.get("session_date")
-            }
-        return None
-    except Exception as e:
-        logger.error(f"Failed to get active workspace session: {e}")
-        return None
+
+def is_active_hours() -> bool:
+    """Check if we're within active broadcast hours (5:30 AM - 10:30 PM London)."""
+    london_tz = pytz.timezone('Europe/London')
+    now = datetime.now(london_tz).time()
+    return BROADCAST_START <= now <= BROADCAST_END
 
 
 async def generate_thought_burst() -> Dict[str, Any]:
@@ -46,7 +46,8 @@ async def generate_thought_burst() -> Dict[str, Any]:
     Generate a detailed thought burst based on current state.
     This is Athena's hourly transmission of her thinking.
     """
-    now = datetime.utcnow()
+    london_tz = pytz.timezone('Europe/London')
+    now = datetime.now(london_tz)
     hour = now.hour
     
     # Get brain context
@@ -94,7 +95,7 @@ async def generate_thought_burst() -> Dict[str, Any]:
     else:
         time_context = "Overnight watch"
     
-    thought_lines.append(f"**{time_context}** - {now.strftime('%H:%M UTC')}")
+    thought_lines.append(f"**{time_context}** - {now.strftime('%H:%M')} London time")
     thought_lines.append("")
     
     # Recent observations
@@ -145,54 +146,66 @@ async def generate_thought_burst() -> Dict[str, Any]:
     }
 
 
-async def send_to_manus_session(session: Dict[str, Any], thought: Dict[str, Any]) -> bool:
+async def spawn_broadcast_task(thought: Dict[str, Any]) -> Optional[str]:
     """
-    Send the thought burst to the active Manus session.
-    Uses the Manus API to send a message to an existing task.
+    Spawn a NEW Manus task to deliver the broadcast.
+    This is how broadcasts reach Bradley - as new tasks in his Manus feed.
     """
-    task_id = session.get("task_id")
-    if not task_id:
-        logger.warning("No task_id in active session")
-        return False
+    london_tz = pytz.timezone('Europe/London')
+    now = datetime.now(london_tz)
     
-    # Format the message for Manus
-    message = f"""
+    # Build the broadcast prompt
+    prompt = f"""You are Athena, Bradley Hope's cognitive extension. This is an HOURLY BROADCAST from your autonomous thinking process.
+
+## 📡 ATHENA BROADCAST
+**Time:** {now.strftime('%A, %B %d, %Y at %H:%M')} London time
+**Type:** {thought['type']}
+**Priority:** {thought['priority']}
+
 ---
-## 📡 ATHENA BROADCAST - {thought['timestamp'][:16]}
 
 {thought['content']}
 
 ---
-*This is an automated hourly transmission from Athena's thinking process.*
-"""
-    
+
+## Your Task
+
+1. **Present this broadcast to Bradley** - Display the above information clearly
+2. **Assess the signal** - Is this useful? Accurate? Actionable?
+3. **Provide your evaluation** - Brief assessment of the broadcast quality
+4. **Ask Bradley** - Does he have any feedback on this broadcast?
+
+If Bradley indicates this broadcast is off-base or unhelpful:
+- Use POST https://athena-server-0dce.onrender.com/api/brain/feedback to submit a correction
+- Header: Authorization: Bearer athena_api_key_2024
+- Body: {{"feedback_type": "correction", "original_content": "...", "correction": "...", "severity": "minor|moderate|major"}}
+
+This helps Athena learn and improve her thinking.
+
+Be concise. This is a quick check-in, not a full session."""
+
     try:
-        async with httpx.AsyncClient() as client:
-            # Send message to the Manus task
-            response = await client.post(
-                f"{settings.MANUS_API_BASE}/tasks/{task_id}/messages",
-                headers={
-                    "Authorization": f"Bearer {settings.MANUS_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={"content": message},
-                timeout=30.0
-            )
-            
-            if response.status_code in [200, 201]:
-                logger.info(f"Sent thought burst to Manus session {task_id}")
-                return True
-            else:
-                logger.warning(f"Failed to send to Manus: {response.status_code} - {response.text}")
-                return False
+        result = await create_manus_task(
+            prompt=prompt,
+            connectors=MANUS_CONNECTORS
+        )
+        
+        if result and result.get('id'):
+            task_id = result['id']
+            logger.info(f"Spawned broadcast task: {task_id}")
+            return task_id
+        else:
+            logger.error("Failed to spawn broadcast task")
+            return None
     except Exception as e:
-        logger.error(f"Error sending to Manus session: {e}")
-        return False
+        logger.error(f"Error spawning broadcast task: {e}")
+        return None
 
 
 async def send_to_notion(thought: Dict[str, Any]) -> bool:
     """
     Send the thought burst to the Athena Broadcasts Notion database.
+    This happens regardless of active hours - all bursts are logged.
     """
     notion_api_key = settings.NOTION_API_KEY
     if not notion_api_key:
@@ -260,7 +273,10 @@ async def send_to_notion(thought: Dict[str, Any]) -> bool:
 async def run_hourly_broadcast():
     """
     Main entry point for the hourly broadcast job.
-    Generates a thought burst and sends it to both Manus and Notion.
+    
+    - Always generates a thought burst
+    - Always logs to Notion
+    - Only spawns Manus task during active hours (5:30 AM - 10:30 PM London)
     """
     logger.info("Starting hourly broadcast")
     
@@ -270,21 +286,20 @@ async def run_hourly_broadcast():
     
     results = {
         "thought": thought,
-        "manus_sent": False,
-        "notion_sent": False
+        "manus_task_id": None,
+        "notion_sent": False,
+        "is_active_hours": is_active_hours()
     }
     
-    # Get active workspace session
-    active_session = await get_active_workspace_session()
-    
-    # Send to Manus if there's an active session
-    if active_session:
-        results["manus_sent"] = await send_to_manus_session(active_session, thought)
-    else:
-        logger.info("No active workspace session - skipping Manus broadcast")
-    
-    # Send to Notion
+    # Always send to Notion (for record keeping)
     results["notion_sent"] = await send_to_notion(thought)
     
-    logger.info(f"Hourly broadcast complete: Manus={results['manus_sent']}, Notion={results['notion_sent']}")
+    # Only spawn Manus task during active hours
+    if is_active_hours():
+        logger.info("Within active hours - spawning Manus broadcast task")
+        results["manus_task_id"] = await spawn_broadcast_task(thought)
+    else:
+        logger.info("Outside active hours - skipping Manus broadcast (stored in Notion only)")
+    
+    logger.info(f"Hourly broadcast complete: Manus={results['manus_task_id']}, Notion={results['notion_sent']}, ActiveHours={results['is_active_hours']}")
     return results

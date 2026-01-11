@@ -130,6 +130,7 @@ def setup_scheduled_jobs():
     from jobs.notion_sync import run_notion_sync
     from jobs.evolution_engine import run_evolution_engine
     from jobs.hourly_broadcast import run_hourly_broadcast
+    from jobs.synthesis_broadcast import run_synthesis_broadcast
     
     # Observation burst - every 30 minutes
     scheduler.add_job(
@@ -159,6 +160,7 @@ def setup_scheduled_jobs():
     )
     
     # ATHENA THINKING - 5:30 AM London (hybrid: server-side + Manus broadcast)
+    # This also spawns the Workspace & Agenda session immediately after
     scheduler.add_job(
         run_athena_thinking,
         CronTrigger(hour=5, minute=30),
@@ -167,12 +169,31 @@ def setup_scheduled_jobs():
         replace_existing=True
     )
     
-    # Agenda & Workspace - 6:05 AM London
+    # Workspace & Agenda - 5:35 AM London (spawned by server, not Manus scheduled)
+    # Runs right after ATHENA THINKING completes
     scheduler.add_job(
         create_agenda_workspace,
-        CronTrigger(hour=6, minute=5),
+        CronTrigger(hour=5, minute=35),
         id="agenda_workspace",
-        name="Agenda & Workspace Session",
+        name="Workspace & Agenda Session",
+        replace_existing=True
+    )
+    
+    # Morning Synthesis - 5:40 AM London (strategic analysis of overnight activity)
+    scheduler.add_job(
+        run_synthesis_broadcast,
+        CronTrigger(hour=5, minute=40),
+        id="morning_synthesis",
+        name="Morning Synthesis Broadcast",
+        replace_existing=True
+    )
+    
+    # Evening Synthesis - 5:30 PM London (strategic analysis of day's activity)
+    scheduler.add_job(
+        run_synthesis_broadcast,
+        CronTrigger(hour=17, minute=30),
+        id="evening_synthesis",
+        name="Evening Synthesis Broadcast",
         replace_existing=True
     )
     
@@ -212,10 +233,11 @@ def setup_scheduled_jobs():
         replace_existing=True
     )
     
-    # Hourly broadcast - every hour on the hour (6am-10pm London)
+    # Hourly broadcast - every hour on the half-hour (6:30am-10:30pm London)
+    # Broadcasts only during active hours; overnight bursts stored but not broadcast
     scheduler.add_job(
         run_hourly_broadcast,
-        CronTrigger(hour="6-22", minute=0),
+        CronTrigger(hour="6-22", minute=30),
         id="hourly_broadcast",
         name="Hourly Thought Broadcast",
         replace_existing=True

@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 from config import settings, MANUS_CONNECTORS
 from db.neon import db_cursor, set_active_session
 from db.brain import (
-    store_daily_impression, get_brain_status, get_identity, get_boundaries, get_values,
+    store_daily_impression, get_brain_status, get_core_identity, get_boundaries, get_values,
     get_continuous_state_context
 )
 from integrations.manus_api import create_manus_task, rename_manus_task
@@ -209,7 +209,7 @@ async def spawn_thinking_session(data: Dict[str, Any], use_mcp_fallback: bool = 
     # Get brain context for self-awareness
     try:
         brain_status = get_brain_status()
-        identity = get_identity()
+        identity = get_core_identity()
         boundaries = get_boundaries()
         values = get_values()
         continuous_state = get_continuous_state_context()
