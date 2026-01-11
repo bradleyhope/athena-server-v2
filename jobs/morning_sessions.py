@@ -28,6 +28,7 @@ logger = logging.getLogger("athena.jobs.morning")
 COMMAND_CENTER_PAGE_ID = "2e3d44b3-a00b-81ab-bbda-ced57f8c345d"
 WORKSPACE_GUIDE_PAGE_ID = "2e5d44b3-a00b-813f-83fa-f3f3859d3ce8"
 SESSION_ARCHIVE_DB_ID = "d075385d-b6f3-472b-b53f-e528f4ed22db"
+ATHENA_TASKS_DB_ID = "44aa96e7-eb95-45ac-9b28-f3bfffec6802"
 
 
 def get_workspace_agenda_prompt():
@@ -50,25 +51,33 @@ This is your daily "Agenda & Workspace" session - Bradley's interactive workspac
 Use notion-fetch with ID: {COMMAND_CENTER_PAGE_ID}
 Follow all instructions there, especially SESSION 1: AGENDA & WORKSPACE.
 
-**STEP 2: Fetch the Morning Brief**
+**STEP 2: Check Athena Tasks Database**
+Query the Athena Tasks database (data_source_id: {ATHENA_TASKS_DB_ID}) to see:
+- Tasks completed today (celebrate wins!)
+- Tasks due today or overdue
+- High priority items
+This is KEY for the daily brief - Bradley wants to see what's been accomplished.
+
+**STEP 3: Fetch the Morning Brief from Brain API**
 GET https://athena-server-0dce.onrender.com/api/brief
 Header: Authorization: Bearer athena_api_key_2024
 This returns: synthesis, patterns, pending_drafts, action_items.
 
-**STEP 3: Get Today's Calendar**
+**STEP 4: Get Today's Calendar**
 Use google-calendar MCP to list today's events.
 
-**STEP 4: Check Gmail**
+**STEP 5: Check Gmail**
 Use gmail MCP to check for urgent unread emails.
 
-**STEP 5: Present the Daily Brief**
+**STEP 6: Present the Daily Brief**
 **IMPORTANT: Present the brief as inline text in the message, NOT as a document attachment.**
 
 Format:
+- **Tasks Completed Today** (celebrate wins from Athena Tasks!)
 - **Questions for Bradley** (decisions needed, canonical memory proposals)
 - **Respond To** (urgent emails with draft suggestions)
 - **Today's Schedule** (calendar with prep notes)
-- **Priority Actions** (top 3-5 items)
+- **Priority Actions** (top 3-5 items from Athena Tasks)
 - **Handled** (what you processed)
 - **System Status** (observation/pattern/canonical counts)
 
@@ -76,7 +85,7 @@ Use clean formatting with headers, bullet points, and clear sections. Keep it co
 
 ## THROUGHOUT THE DAY
 
-**STEP 6: Handle Hourly Broadcasts**
+**STEP 7: Handle Hourly Broadcasts**
 Every hour, Athena's autonomous thinking process generates broadcasts. When you receive one:
 
 1. **Triage it** - Is this important right now? Does it need Bradley's attention?
@@ -88,7 +97,7 @@ If Bradley wants to recalibrate Athena's thinking:
 - **Add boundary**: POST /api/brain/boundaries with {{boundary_type, category, rule, description}}
 - **Answer a question**: POST /api/brain/feedback with {{feedback_type: "answer", content, context}}
 
-**STEP 7: Stay Available**
+**STEP 8: Stay Available**
 This session is Bradley's workspace for the day. Handle:
 - Feedback on insights → acknowledge and learn
 - Answers to your questions → store appropriately  
@@ -96,7 +105,7 @@ This session is Bradley's workspace for the day. Handle:
 - Task execution requests → do it or spawn new Manus session
 - New requests → research, draft, or schedule
 
-**STEP 8: Log the Session**
+**STEP 9: Log the Session**
 At end of day, create entry in Session Archive (data_source_id: {SESSION_ARCHIVE_DB_ID}) with agent: "ATHENA".
 
 ## KEY INFO
