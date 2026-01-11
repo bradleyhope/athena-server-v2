@@ -24,3 +24,4 @@ apscheduler==3.10.4
 
 # Utilities
 python-dotenv==1.0.1
+pytz==2024.1

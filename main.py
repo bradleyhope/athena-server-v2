@@ -4,10 +4,30 @@ FastAPI server for Athena 2.0 with three-tier thinking model.
 """
 
 import os
+import sys
 import logging
+
+# Early logging setup to catch import errors
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+early_logger = logging.getLogger("athena.startup")
+early_logger.info("Starting imports...")
+early_logger.info(f"Python version: {sys.version}")
+early_logger.info(f"DATABASE_URL env: {bool(os.getenv('DATABASE_URL'))}")
+
+try:
+    early_logger.info("Importing zoneinfo...")
+    from zoneinfo import ZoneInfo
+    early_logger.info("zoneinfo imported successfully")
+except Exception as e:
+    early_logger.error(f"Failed to import zoneinfo: {e}")
+    # Fallback to pytz if zoneinfo not available
+    import pytz
+    ZoneInfo = lambda tz: pytz.timezone(tz)
 from contextlib import asynccontextmanager
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
