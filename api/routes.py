@@ -373,12 +373,27 @@ async def get_live_thinking():
 
 
 @router.post("/trigger/morning-sessions")
-async def trigger_morning_sessions(background_tasks: BackgroundTasks):
+async def trigger_morning_sessions():
     """Manually trigger the Workspace & Agenda session."""
     from jobs.morning_sessions import run_morning_sessions
+    import asyncio
     
-    background_tasks.add_task(run_morning_sessions)
-    return {"message": "Morning session (Workspace & Agenda) triggered", "status": "running"}
+    # Run the async function directly and return result
+    try:
+        result = await run_morning_sessions()
+        return {
+            "message": "Morning session (Workspace & Agenda) created",
+            "status": "success",
+            "result": result
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "message": "Morning session failed",
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 
 # Active Sessions endpoints
