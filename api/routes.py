@@ -374,12 +374,11 @@ async def get_live_thinking():
 
 @router.post("/trigger/morning-sessions")
 async def trigger_morning_sessions(background_tasks: BackgroundTasks):
-    """Manually trigger morning Manus sessions."""
-    from jobs.morning_sessions import create_athena_thinking, create_agenda_workspace
+    """Manually trigger the Workspace & Agenda session."""
+    from jobs.morning_sessions import run_morning_sessions
     
-    background_tasks.add_task(create_athena_thinking)
-    background_tasks.add_task(create_agenda_workspace)
-    return {"message": "Morning sessions triggered", "status": "running"}
+    background_tasks.add_task(run_morning_sessions)
+    return {"message": "Morning session (Workspace & Agenda) triggered", "status": "running"}
 
 
 # Active Sessions endpoints
