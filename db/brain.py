@@ -393,6 +393,42 @@ def set_session_state(
         return str(cursor.fetchone()['id'])
 
 
+def update_session_state(
+    session_type: str,
+    handoff_context: Dict = None,
+    state_data: Dict = None,
+    key_learnings: list = None
+) -> bool:
+    """
+    Update session state for the current date.
+    
+    Args:
+        session_type: Type of session
+        handoff_context: Context to pass to next session
+        state_data: Current state data
+        key_learnings: List of learnings from the session
+        
+    Returns:
+        True if updated
+    """
+    from datetime import date as date_type
+    today = date_type.today()
+    
+    # Merge key_learnings into handoff_context if provided
+    if key_learnings and handoff_context:
+        handoff_context['key_learnings'] = key_learnings
+    elif key_learnings:
+        handoff_context = {'key_learnings': key_learnings}
+    
+    set_session_state(
+        session_type=session_type,
+        session_date=today,
+        state_data=state_data,
+        handoff_context=handoff_context
+    )
+    return True
+
+
 # =============================================================================
 # LAYER 4: EVOLUTION
 # =============================================================================
@@ -684,3 +720,36 @@ def get_session_brief(session_type: str) -> Dict[str, Any]:
         'pending_actions_count': len(get_pending_actions()),
         'evolution_proposals_count': len(get_evolution_proposals())
     }
+
+
+# =============================================================================
+# PERFORMANCE METRICS (Simple)
+# =============================================================================
+
+def record_performance_metric(
+    metric_name: str,
+    metric_value: float,
+    metric_unit: str = 'count',
+    context: Dict = None
+) -> str:
+    """
+    Record a simple performance metric.
+    
+    Args:
+        metric_name: Name of the metric
+        metric_value: Numeric value
+        metric_unit: Unit of measurement
+        context: Additional context data
+        
+    Returns:
+        Metric ID
+    """
+    now = datetime.utcnow()
+    return record_metric(
+        metric_type='system',
+        metric_name=metric_name,
+        metric_value=metric_value,
+        period_start=now,
+        period_end=now,
+        dimensions={'unit': metric_unit, 'context': context or {}}
+    )

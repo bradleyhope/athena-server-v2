@@ -38,6 +38,7 @@ from config import settings
 from db.neon import get_db_connection, check_db_health
 from api.routes import router as api_router
 from api.brain_routes import router as brain_router
+from api.session_init import router as session_router
 
 # Configure logging
 logging.basicConfig(
@@ -125,6 +126,7 @@ def setup_scheduled_jobs():
     from jobs.overnight_learning import run_overnight_learning
     from jobs.weekly_rebuild import run_weekly_rebuild
     from jobs.notion_sync import run_notion_sync
+    from jobs.evolution_engine import run_evolution_engine
     
     # Observation burst - every 30 minutes
     scheduler.add_job(
@@ -198,6 +200,15 @@ def setup_scheduled_jobs():
         replace_existing=True
     )
     
+    # Evolution engine - Sunday 2 AM (after weekly rebuild)
+    scheduler.add_job(
+        run_evolution_engine,
+        CronTrigger(day_of_week="sun", hour=2, minute=0),
+        id="evolution_engine",
+        name="Evolution Engine (Brain Learning)",
+        replace_existing=True
+    )
+    
     logger.info("Scheduled jobs configured")
 
 
@@ -230,6 +241,7 @@ async def root():
 # Include API routes
 app.include_router(api_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(brain_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(session_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 
 
 if __name__ == "__main__":
