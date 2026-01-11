@@ -41,12 +41,12 @@ async def debug_settings():
 # Debug endpoint - direct connection
 @router.get("/debug/db")
 async def debug_db():
-    """Debug database connection with direct psycopg2."""
-    import psycopg2
+    """Debug database connection with direct psycopg v3."""
+    import psycopg
     from config import settings
     
     try:
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             settings.DATABASE_URL,
             connect_timeout=30
         )
@@ -91,14 +91,14 @@ async def debug_db_cursor():
 @router.get("/debug/get_conn")
 async def debug_get_conn():
     """Debug database connection using get_db_connection function with detailed errors."""
-    import psycopg2
+    import psycopg
     import time
     from config import settings
     
     errors = []
     for attempt in range(3):
         try:
-            conn = psycopg2.connect(
+            conn = psycopg.connect(
                 settings.DATABASE_URL,
                 connect_timeout=30
             )

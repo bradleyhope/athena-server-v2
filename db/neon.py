@@ -1,6 +1,6 @@
 """
 Athena Server v2 - Neon Database Connection
-PostgreSQL connection with retry logic for Neon cold starts.
+PostgreSQL connection using psycopg v3 for Python 3.13 compatibility.
 """
 
 import time
@@ -8,8 +8,8 @@ import logging
 from contextlib import contextmanager
 from typing import Optional, Generator
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg
+from psycopg.rows import dict_row
 
 from config import settings
 
@@ -20,7 +20,7 @@ MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
 
-def get_db_connection(max_retries: int = MAX_RETRIES) -> Optional[psycopg2.extensions.connection]:
+def get_db_connection(max_retries: int = MAX_RETRIES) -> Optional[psycopg.Connection]:
     """
     Get a database connection with retry logic for Neon cold starts.
     
@@ -35,11 +35,9 @@ def get_db_connection(max_retries: int = MAX_RETRIES) -> Optional[psycopg2.exten
     """
     for attempt in range(max_retries):
         try:
-            conn = psycopg2.connect(
+            conn = psycopg.connect(
                 settings.DATABASE_URL,
                 connect_timeout=30
-                # Note: Do NOT add options="-c statement_timeout=..." here
-                # Neon pooler (PgBouncer) does not support startup parameters
             )
             logger.debug(f"Database connection established (attempt {attempt + 1})")
             return conn
@@ -68,8 +66,8 @@ def db_cursor(dict_cursor: bool = True) -> Generator:
         raise Exception("Could not establish database connection")
     
     try:
-        cursor_factory = RealDictCursor if dict_cursor else None
-        cursor = conn.cursor(cursor_factory=cursor_factory)
+        row_factory = dict_row if dict_cursor else None
+        cursor = conn.cursor(row_factory=row_factory)
         yield cursor
         conn.commit()
     except Exception as e:
@@ -84,17 +82,13 @@ def db_cursor(dict_cursor: bool = True) -> Generator:
 async def check_db_health() -> bool:
     """
     Check database connection health.
-    Uses direct psycopg2.connect() like the working debug endpoint.
     
     Returns:
         True if database is accessible, False otherwise
     """
-    import psycopg2
-    from config import settings
-    
     for attempt in range(3):
         try:
-            conn = psycopg2.connect(
+            conn = psycopg.connect(
                 settings.DATABASE_URL,
                 connect_timeout=30
             )
@@ -107,7 +101,6 @@ async def check_db_health() -> bool:
         except Exception as e:
             logger.warning(f"Database health check attempt {attempt + 1} failed: {e}")
             if attempt < 2:
-                import time
                 time.sleep(5)
     
     logger.error("All database health check attempts failed")
