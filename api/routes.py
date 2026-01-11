@@ -285,6 +285,24 @@ async def trigger_athena_thinking_sync():
         return {"message": "ATHENA THINKING failed", "error": str(e)}
 
 
+@router.post("/trigger/manus-test")
+async def trigger_manus_test():
+    """Direct Manus API test for debugging."""
+    from integrations.manus_api import create_manus_task
+    
+    try:
+        result = await create_manus_task(
+            task_prompt="This is a test session. Please acknowledge and confirm you can see this message.",
+            model="manus-1.6",
+            connectors=["9c27c684-2f4f-4d33-8fcf-51664ea15c00"],
+            session_type="general"
+        )
+        return {"message": "Manus test completed", "result": result}
+    except Exception as e:
+        import traceback
+        return {"message": "Manus test failed", "error": str(e), "traceback": traceback.format_exc()}
+
+
 @router.post("/trigger/morning-sessions")
 async def trigger_morning_sessions(background_tasks: BackgroundTasks):
     """Manually trigger morning Manus sessions."""
