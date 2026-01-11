@@ -272,7 +272,8 @@ async def get_active_rules(api_key: str = Depends(verify_api_key)):
                 FROM boundaries WHERE active = true
                 ORDER BY category, created_at DESC
             """)
-            boundaries = [{"category": r[0], "rule": r[1], "description": r[2], "type": r[3]} 
+            boundaries = [{"category": r['category'], "rule": r['rule'], 
+                          "description": r['description'], "type": r['boundary_type']} 
                          for r in cur.fetchall()]
             
             # Get preferences
@@ -281,7 +282,7 @@ async def get_active_rules(api_key: str = Depends(verify_api_key)):
                 FROM preferences
                 ORDER BY category, updated_at DESC
             """)
-            preferences = [{"category": r[0], "key": r[1], "value": r[2]} 
+            preferences = [{"category": r['category'], "key": r['key'], "value": r['value']} 
                           for r in cur.fetchall()]
             
             # Get active canonical memory
@@ -290,7 +291,8 @@ async def get_active_rules(api_key: str = Depends(verify_api_key)):
                 FROM canonical_memory WHERE active = true
                 ORDER BY category, created_at DESC
             """)
-            canonical = [{"category": r[0], "key": r[1], "value": r[2], "description": r[3]} 
+            canonical = [{"category": r['category'], "key": r['key'], 
+                         "value": r['value'], "description": r['description']} 
                         for r in cur.fetchall()]
             
             return {
