@@ -1491,27 +1491,18 @@ def create_relationship(
         UUID of the created relationship
     """
     with db_cursor() as cursor:
+        # Existing schema has: id, source_entity_id, target_entity_id, relationship_type, evidence, confidence, investigation_id, created_at
         cursor.execute("""
             INSERT INTO entity_relationships 
-            (source_entity_id, target_entity_id, relationship_type, description, strength, start_date, end_date, metadata, source)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (source_entity_id, target_entity_id, relationship_type) 
-            DO UPDATE SET 
-                description = EXCLUDED.description,
-                strength = EXCLUDED.strength,
-                metadata = EXCLUDED.metadata,
-                updated_at = NOW()
+            (source_entity_id, target_entity_id, relationship_type, evidence, confidence)
+            VALUES (%s, %s, %s, %s, %s)
             RETURNING id
         """, (
             source_entity_id,
             target_entity_id,
             relationship_type,
-            description,
-            strength,
-            start_date,
-            end_date,
-            json.dumps(metadata or {}),
-            source
+            description,  # maps to evidence column
+            strength  # maps to confidence column
         ))
         return str(cursor.fetchone()['id'])
 
