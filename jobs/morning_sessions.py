@@ -189,7 +189,7 @@ async def run_morning_sessions():
             logger.info(f"Created Workspace & Agenda session: {task_id}")
             
             # Get brain context for response
-            pending = await get_pending_actions()
+            pending = get_pending_actions()
             
             return {
                 "status": "success",
