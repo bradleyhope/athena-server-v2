@@ -108,3 +108,4 @@ Athena reads these pages at session start:
 | Manus 1.6 Lite | `manus-1.6-lite` |
 
 <- Fixed observations endpoint to use source_type Deployment trigger: 20260111043602 -->
+<- Fixed observations endpoint to use source_type Fixed DATABASE_URL: 20260111044522 -->
