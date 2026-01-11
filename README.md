@@ -106,3 +106,5 @@ Athena reads these pages at session start:
 | Claude Sonnet 4.5 | `claude-sonnet-4-5-20250929` |
 | Manus 1.6 | `manus-1.6` |
 | Manus 1.6 Lite | `manus-1.6-lite` |
+
+<- Fixed observations endpoint to use source_type Deployment trigger: 20260111043602 -->
