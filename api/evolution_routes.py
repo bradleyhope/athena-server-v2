@@ -9,6 +9,8 @@ import logging
 from typing import Optional, List
 from datetime import datetime
 
+import json
+
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
@@ -390,7 +392,7 @@ async def create_manual_proposal(proposal: ManualProposal):
                 proposal.evolution_type,
                 proposal.category,
                 proposal.description,
-                proposal.change_data,
+                json.dumps(proposal.change_data),  # Convert dict to JSON string
                 'manual',
                 1.0,  # Manual proposals have full confidence
                 'proposed'
