@@ -264,6 +264,15 @@ async def trigger_synthesis(background_tasks: BackgroundTasks):
     return {"message": "Synthesis triggered", "status": "running"}
 
 
+@router.post("/trigger/athena-thinking")
+async def trigger_athena_thinking(background_tasks: BackgroundTasks):
+    """Manually trigger ATHENA THINKING session (hybrid: server-side + Manus broadcast)."""
+    from jobs.athena_thinking import run_athena_thinking
+    
+    background_tasks.add_task(run_athena_thinking)
+    return {"message": "ATHENA THINKING triggered", "status": "running"}
+
+
 @router.post("/trigger/morning-sessions")
 async def trigger_morning_sessions(background_tasks: BackgroundTasks):
     """Manually trigger morning Manus sessions."""
