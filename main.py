@@ -40,6 +40,9 @@ from api.routes import router as api_router
 from api.brain_routes import router as brain_router
 from api.session_init import router as session_router
 from api.thinking_routes import router as thinking_router
+from api.entity_routes import router as entity_router
+from api.evolution_routes import router as evolution_router
+from jobs.workflow_executor import workflow_router
 
 # Configure logging
 logging.basicConfig(
@@ -88,6 +91,11 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan
 )
+
+# Boundary Enforcement Middleware (CRITICAL - must be first)
+from api.middleware.boundary_check import BoundaryCheckMiddleware
+app.add_middleware(BoundaryCheckMiddleware)
+logger.info("Boundary enforcement middleware enabled")
 
 # CORS middleware
 app.add_middleware(
@@ -293,6 +301,9 @@ app.include_router(api_router, prefix="/api", dependencies=[Depends(verify_api_k
 app.include_router(brain_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(session_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(thinking_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(entity_router, dependencies=[Depends(verify_api_key)])  # v1 prefix in router
+app.include_router(evolution_router, dependencies=[Depends(verify_api_key)])  # v1 prefix in router
+app.include_router(workflow_router, dependencies=[Depends(verify_api_key)])  # v1 prefix in router
 
 
 if __name__ == "__main__":

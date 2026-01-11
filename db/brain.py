@@ -1227,3 +1227,402 @@ def get_continuous_state_context() -> Dict[str, Any]:
         "open_questions": get_open_questions(),
         "learning_stats": get_learning_stats()
     }
+
+
+# =============================================================================
+# ENTITIES - Knowledge Graph for People, Organizations, Projects
+# =============================================================================
+
+def create_entity(
+    entity_type: str,
+    name: str,
+    description: str = None,
+    aliases: List[str] = None,
+    metadata: Dict = None,
+    access_tier: str = "default",
+    source: str = None,
+    confidence: float = 1.0
+) -> str:
+    """
+    Create a new entity in the knowledge graph.
+    
+    Args:
+        entity_type: Type of entity ('person', 'organization', 'project', 'location')
+        name: Primary name of the entity
+        description: Optional description
+        aliases: Optional list of alternative names
+        metadata: Optional type-specific metadata
+        access_tier: Access tier ('default', 'vip', 'restricted')
+        source: Where this entity was learned from
+        confidence: Confidence in accuracy (0.0-1.0)
+        
+    Returns:
+        UUID of the created entity
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO entities (entity_type, name, description, aliases, metadata, access_tier, source, confidence)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            entity_type,
+            name,
+            description,
+            json.dumps(aliases or []),
+            json.dumps(metadata or {}),
+            access_tier,
+            source,
+            confidence
+        ))
+        entity_id = str(cursor.fetchone()['id'])
+        logger.info(f"Created entity: {entity_type}/{name} ({entity_id})")
+        return entity_id
+
+
+def get_entity(entity_id: str) -> Optional[Dict]:
+    """Get an entity by ID."""
+    with db_cursor() as cursor:
+        cursor.execute("SELECT * FROM entities WHERE id = %s", (entity_id,))
+        return cursor.fetchone()
+
+
+def get_entity_by_name(name: str, entity_type: str = None) -> Optional[Dict]:
+    """
+    Get an entity by name (case-insensitive) or alias.
+    
+    Args:
+        name: Name to search for
+        entity_type: Optional type filter
+        
+    Returns:
+        Entity dict or None
+    """
+    with db_cursor() as cursor:
+        query = """
+            SELECT * FROM entities 
+            WHERE active = TRUE
+            AND (
+                LOWER(name) = LOWER(%s)
+                OR aliases @> %s::jsonb
+            )
+        """
+        params = [name, json.dumps([name.lower()])]
+        
+        if entity_type:
+            query += " AND entity_type = %s"
+            params.append(entity_type)
+        
+        query += " ORDER BY confidence DESC LIMIT 1"
+        cursor.execute(query, params)
+        return cursor.fetchone()
+
+
+def search_entities(
+    query: str = None,
+    entity_type: str = None,
+    access_tier: str = None,
+    limit: int = 20
+) -> List[Dict]:
+    """
+    Search for entities.
+    
+    Args:
+        query: Optional text search query
+        entity_type: Optional type filter
+        access_tier: Optional access tier filter
+        limit: Maximum results to return
+        
+    Returns:
+        List of matching entities
+    """
+    with db_cursor() as cursor:
+        sql = "SELECT * FROM entities WHERE active = TRUE"
+        params = []
+        
+        if query:
+            sql += " AND to_tsvector('english', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('english', %s)"
+            params.append(query)
+        
+        if entity_type:
+            sql += " AND entity_type = %s"
+            params.append(entity_type)
+        
+        if access_tier:
+            sql += " AND access_tier = %s"
+            params.append(access_tier)
+        
+        sql += " ORDER BY confidence DESC, name LIMIT %s"
+        params.append(limit)
+        
+        cursor.execute(sql, params)
+        return cursor.fetchall()
+
+
+def get_entities_by_type(entity_type: str, active_only: bool = True) -> List[Dict]:
+    """Get all entities of a specific type."""
+    with db_cursor() as cursor:
+        query = "SELECT * FROM entities WHERE entity_type = %s"
+        params = [entity_type]
+        
+        if active_only:
+            query += " AND active = TRUE"
+        
+        query += " ORDER BY name"
+        cursor.execute(query, params)
+        return cursor.fetchall()
+
+
+def get_vip_entities() -> List[Dict]:
+    """Get all VIP entities (people with access_tier = 'vip')."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT * FROM entities 
+            WHERE access_tier = 'vip' AND active = TRUE
+            ORDER BY name
+        """)
+        return cursor.fetchall()
+
+
+def update_entity(
+    entity_id: str,
+    name: str = None,
+    description: str = None,
+    aliases: List[str] = None,
+    metadata: Dict = None,
+    access_tier: str = None,
+    confidence: float = None
+) -> bool:
+    """
+    Update an entity.
+    
+    Args:
+        entity_id: ID of entity to update
+        Other args: Fields to update (None = no change)
+        
+    Returns:
+        True if updated
+    """
+    updates = []
+    params = []
+    
+    if name is not None:
+        updates.append("name = %s")
+        params.append(name)
+    if description is not None:
+        updates.append("description = %s")
+        params.append(description)
+    if aliases is not None:
+        updates.append("aliases = %s")
+        params.append(json.dumps(aliases))
+    if metadata is not None:
+        updates.append("metadata = %s")
+        params.append(json.dumps(metadata))
+    if access_tier is not None:
+        updates.append("access_tier = %s")
+        params.append(access_tier)
+    if confidence is not None:
+        updates.append("confidence = %s")
+        params.append(confidence)
+    
+    if not updates:
+        return False
+    
+    updates.append("updated_at = NOW()")
+    params.append(entity_id)
+    
+    with db_cursor() as cursor:
+        cursor.execute(f"""
+            UPDATE entities SET {', '.join(updates)}
+            WHERE id = %s
+        """, params)
+        return cursor.rowcount > 0
+
+
+def delete_entity(entity_id: str, soft_delete: bool = True) -> bool:
+    """
+    Delete an entity.
+    
+    Args:
+        entity_id: ID of entity to delete
+        soft_delete: If True, just set active=FALSE. If False, hard delete.
+        
+    Returns:
+        True if deleted
+    """
+    with db_cursor() as cursor:
+        if soft_delete:
+            cursor.execute("UPDATE entities SET active = FALSE, updated_at = NOW() WHERE id = %s", (entity_id,))
+        else:
+            cursor.execute("DELETE FROM entities WHERE id = %s", (entity_id,))
+        return cursor.rowcount > 0
+
+
+# Entity Relationships
+
+def create_relationship(
+    source_entity_id: str,
+    target_entity_id: str,
+    relationship_type: str,
+    description: str = None,
+    strength: float = 1.0,
+    start_date: date = None,
+    end_date: date = None,
+    metadata: Dict = None,
+    source: str = None
+) -> str:
+    """
+    Create a relationship between two entities.
+    
+    Args:
+        source_entity_id: ID of source entity
+        target_entity_id: ID of target entity
+        relationship_type: Type of relationship (e.g., 'employee_of', 'works_on')
+        description: Optional description
+        strength: Relationship strength (0.0-1.0)
+        start_date: When relationship started
+        end_date: When relationship ended (None = ongoing)
+        metadata: Additional metadata
+        source: Where this relationship was learned from
+        
+    Returns:
+        UUID of the created relationship
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO entity_relationships 
+            (source_entity_id, target_entity_id, relationship_type, description, strength, start_date, end_date, metadata, source)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (source_entity_id, target_entity_id, relationship_type) 
+            DO UPDATE SET 
+                description = EXCLUDED.description,
+                strength = EXCLUDED.strength,
+                metadata = EXCLUDED.metadata,
+                updated_at = NOW()
+            RETURNING id
+        """, (
+            source_entity_id,
+            target_entity_id,
+            relationship_type,
+            description,
+            strength,
+            start_date,
+            end_date,
+            json.dumps(metadata or {}),
+            source
+        ))
+        return str(cursor.fetchone()['id'])
+
+
+def get_entity_relationships(entity_id: str, direction: str = "both") -> List[Dict]:
+    """
+    Get all relationships for an entity.
+    
+    Args:
+        entity_id: ID of the entity
+        direction: 'outgoing', 'incoming', or 'both'
+        
+    Returns:
+        List of relationships with entity details
+    """
+    with db_cursor() as cursor:
+        if direction == "outgoing":
+            cursor.execute("""
+                SELECT r.*, e.name as target_name, e.entity_type as target_type
+                FROM entity_relationships r
+                JOIN entities e ON r.target_entity_id = e.id
+                WHERE r.source_entity_id = %s AND r.active = TRUE
+                ORDER BY r.strength DESC
+            """, (entity_id,))
+        elif direction == "incoming":
+            cursor.execute("""
+                SELECT r.*, e.name as source_name, e.entity_type as source_type
+                FROM entity_relationships r
+                JOIN entities e ON r.source_entity_id = e.id
+                WHERE r.target_entity_id = %s AND r.active = TRUE
+                ORDER BY r.strength DESC
+            """, (entity_id,))
+        else:
+            cursor.execute("""
+                SELECT r.*, 
+                    se.name as source_name, se.entity_type as source_type,
+                    te.name as target_name, te.entity_type as target_type
+                FROM entity_relationships r
+                JOIN entities se ON r.source_entity_id = se.id
+                JOIN entities te ON r.target_entity_id = te.id
+                WHERE (r.source_entity_id = %s OR r.target_entity_id = %s) AND r.active = TRUE
+                ORDER BY r.strength DESC
+            """, (entity_id, entity_id))
+        
+        return cursor.fetchall()
+
+
+# Entity Notes
+
+def add_entity_note(
+    entity_id: str,
+    note_type: str,
+    content: str,
+    importance: str = "normal",
+    valid_until: datetime = None,
+    source: str = None
+) -> str:
+    """
+    Add a note to an entity.
+    
+    Args:
+        entity_id: ID of the entity
+        note_type: Type of note ('interaction', 'preference', 'context', 'reminder')
+        content: Note content
+        importance: 'low', 'normal', 'high', 'critical'
+        valid_until: When this note expires
+        source: Where this note came from
+        
+    Returns:
+        UUID of the created note
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO entity_notes (entity_id, note_type, content, importance, valid_until, source)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (entity_id, note_type, content, importance, valid_until, source))
+        return str(cursor.fetchone()['id'])
+
+
+def get_entity_notes(entity_id: str, note_type: str = None, include_expired: bool = False) -> List[Dict]:
+    """Get notes for an entity."""
+    with db_cursor() as cursor:
+        query = "SELECT * FROM entity_notes WHERE entity_id = %s"
+        params = [entity_id]
+        
+        if note_type:
+            query += " AND note_type = %s"
+            params.append(note_type)
+        
+        if not include_expired:
+            query += " AND (valid_until IS NULL OR valid_until > NOW())"
+        
+        query += " ORDER BY importance DESC, created_at DESC"
+        cursor.execute(query, params)
+        return cursor.fetchall()
+
+
+def get_entity_context(entity_id: str) -> Dict[str, Any]:
+    """
+    Get complete context for an entity including relationships and notes.
+    
+    Args:
+        entity_id: ID of the entity
+        
+    Returns:
+        Dictionary with entity, relationships, and notes
+    """
+    entity = get_entity(entity_id)
+    if not entity:
+        return None
+    
+    return {
+        "entity": entity,
+        "relationships": get_entity_relationships(entity_id),
+        "notes": get_entity_notes(entity_id),
+    }

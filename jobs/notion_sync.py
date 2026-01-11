@@ -354,6 +354,9 @@ async def run_notion_sync():
     # Sync evolution proposals
     sync_evolution_proposals_to_notion()
     
+    # Sync VIP entities
+    await sync_entities_to_notion()
+    
     logger.info("Notion sync job completed")
 
 
@@ -362,6 +365,66 @@ def manual_sync():
     """Run sync manually for testing."""
     import asyncio
     asyncio.run(run_notion_sync())
+
+
+async def sync_entities_to_notion() -> bool:
+    """
+    Sync VIP entities to a Notion database.
+    Creates a structured view of important people and organizations.
+    
+    Returns:
+        True if sync successful
+    """
+    try:
+        from db.brain import get_vip_entities, get_entity_relationships
+        
+        vip_entities = get_vip_entities()
+        if not vip_entities:
+            logger.info("No VIP entities to sync")
+            return True
+        
+        logger.info(f"Syncing {len(vip_entities)} VIP entities to Notion...")
+        
+        # Build blocks for the brain status page
+        page_id = NOTION_TARGETS.get("brain_status")
+        if not page_id:
+            return False
+        
+        blocks = [
+            {
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"type": "text", "text": {"content": "VIP Entities"}}]
+                }
+            }
+        ]
+        
+        for entity in vip_entities:
+            # Get relationships for this entity
+            relationships = get_entity_relationships(str(entity['id']))
+            rel_text = ", ".join([f"{r['relationship_type']} {r.get('target_name', '')}" for r in relationships[:3]])
+            
+            blocks.append({
+                "object": "block",
+                "type": "callout",
+                "callout": {
+                    "rich_text": [
+                        {"type": "text", "text": {"content": f"{entity['name']}\n", "annotations": {"bold": True}}},
+                        {"type": "text", "text": {"content": f"Type: {entity['entity_type']}\n"}},
+                        {"type": "text", "text": {"content": f"{entity.get('description', '')[:100]}\n", "annotations": {"italic": True}}},
+                        {"type": "text", "text": {"content": f"Relationships: {rel_text}" if rel_text else ""}}
+                    ],
+                    "icon": {"emoji": "👤" if entity['entity_type'] == 'person' else "🏢"}
+                }
+            })
+        
+        result = notion_request("POST", f"/blocks/{page_id}/children", {"children": blocks})
+        return result is not None
+        
+    except Exception as e:
+        logger.error(f"Failed to sync entities to Notion: {e}")
+        return False
 
 
 if __name__ == "__main__":
