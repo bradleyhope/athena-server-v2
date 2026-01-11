@@ -272,9 +272,16 @@ async def get_active_rules(api_key: str = Depends(verify_api_key)):
                 FROM boundaries WHERE active = true
                 ORDER BY category, created_at DESC
             """)
-            boundaries = [{"category": r['category'], "rule": r['rule'], 
-                          "description": r['description'], "type": r['boundary_type']} 
-                         for r in cur.fetchall()]
+            rows = cur.fetchall()
+            boundaries = []
+            for r in rows:
+                # Handle both dict and Row objects from psycopg3
+                if hasattr(r, 'keys'):
+                    boundaries.append({"category": r['category'], "rule": r['rule'], 
+                                      "description": r['description'], "type": r['boundary_type']})
+                else:
+                    boundaries.append({"category": r[0], "rule": r[1], 
+                                      "description": r[2], "type": r[3]})
             
             # Get preferences
             cur.execute("""
@@ -282,8 +289,13 @@ async def get_active_rules(api_key: str = Depends(verify_api_key)):
                 FROM preferences
                 ORDER BY category, updated_at DESC
             """)
-            preferences = [{"category": r['category'], "key": r['key'], "value": r['value']} 
-                          for r in cur.fetchall()]
+            rows = cur.fetchall()
+            preferences = []
+            for r in rows:
+                if hasattr(r, 'keys'):
+                    preferences.append({"category": r['category'], "key": r['key'], "value": r['value']})
+                else:
+                    preferences.append({"category": r[0], "key": r[1], "value": r[2]})
             
             # Get active canonical memory
             cur.execute("""
@@ -291,9 +303,15 @@ async def get_active_rules(api_key: str = Depends(verify_api_key)):
                 FROM canonical_memory WHERE active = true
                 ORDER BY category, created_at DESC
             """)
-            canonical = [{"category": r['category'], "key": r['key'], 
-                         "value": r['value'], "description": r['description']} 
-                        for r in cur.fetchall()]
+            rows = cur.fetchall()
+            canonical = []
+            for r in rows:
+                if hasattr(r, 'keys'):
+                    canonical.append({"category": r['category'], "key": r['key'], 
+                                     "value": r['value'], "description": r['description']})
+                else:
+                    canonical.append({"category": r[0], "key": r[1], 
+                                     "value": r[2], "description": r[3]})
             
             return {
                 "boundaries": {
@@ -312,4 +330,6 @@ async def get_active_rules(api_key: str = Depends(verify_api_key)):
             
     except Exception as e:
         logger.error(f"Error getting active rules: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
