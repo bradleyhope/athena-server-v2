@@ -122,7 +122,8 @@ def setup_scheduled_jobs():
     from jobs.observation_burst import run_observation_burst
     from jobs.pattern_detection import run_pattern_detection
     from jobs.synthesis import run_synthesis
-    from jobs.morning_sessions import create_athena_thinking, create_agenda_workspace
+    from jobs.morning_sessions import create_agenda_workspace
+    from jobs.athena_thinking import run_athena_thinking
     from jobs.overnight_learning import run_overnight_learning
     from jobs.weekly_rebuild import run_weekly_rebuild
     from jobs.notion_sync import run_notion_sync
@@ -155,12 +156,12 @@ def setup_scheduled_jobs():
         replace_existing=True
     )
     
-    # ATHENA THINKING - 6:00 AM London
+    # ATHENA THINKING - 5:30 AM London (hybrid: server-side + Manus broadcast)
     scheduler.add_job(
-        create_athena_thinking,
-        CronTrigger(hour=6, minute=0),
+        run_athena_thinking,
+        CronTrigger(hour=5, minute=30),
         id="athena_thinking",
-        name="ATHENA THINKING Session",
+        name="ATHENA THINKING (Hybrid)",
         replace_existing=True
     )
     
