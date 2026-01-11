@@ -327,9 +327,9 @@ async def get_live_thinking():
         session_info = None
         if session_row:
             session_info = {
-                "task_id": session_row[0],
-                "task_url": session_row[1],
-                "updated_at": session_row[2].isoformat() if session_row[2] else None
+                "task_id": session_row['manus_task_id'],
+                "task_url": session_row['manus_task_url'],
+                "updated_at": session_row['updated_at'].isoformat() if session_row['updated_at'] else None
             }
         
         # Get recent thoughts (last 2 hours)
@@ -344,25 +344,25 @@ async def get_live_thinking():
         
         thoughts = [
             {
-                "id": str(row[0]),
-                "session_id": row[1],
-                "type": row[2],
-                "content": row[3][:200] + "..." if len(row[3]) > 200 else row[3],
-                "confidence": row[4],
-                "phase": row[5],
-                "timestamp": row[6].isoformat() if row[6] else None
+                "id": str(row['id']),
+                "session_id": row['session_id'],
+                "type": row['thought_type'],
+                "content": row['content'][:200] + "..." if len(row['content']) > 200 else row['content'],
+                "confidence": row['confidence'],
+                "phase": row['phase'],
+                "timestamp": row['created_at'].isoformat() if row['created_at'] else None
             }
             for row in cursor.fetchall()
         ]
         
         # Get thought type counts for today
         cursor.execute("""
-            SELECT thought_type, COUNT(*)
+            SELECT thought_type, COUNT(*) as count
             FROM thinking_log
             WHERE created_at > CURRENT_DATE
             GROUP BY thought_type
         """)
-        type_counts = {row[0]: row[1] for row in cursor.fetchall()}
+        type_counts = {row['thought_type']: row['count'] for row in cursor.fetchall()}
     
     return {
         "status": "active" if thoughts else "idle",
