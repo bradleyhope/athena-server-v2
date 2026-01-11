@@ -300,3 +300,102 @@ def update_deep_learning_progress(progress: dict) -> str:
             RETURNING id
         """, progress)
         return str(cursor.fetchone()['id'])
+
+
+# Active Sessions Management
+# Stores the current day's ATHENA THINKING session ID for cross-session continuity
+
+def ensure_active_sessions_table():
+    """Create the active_sessions table if it doesn't exist."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS active_sessions (
+                id SERIAL PRIMARY KEY,
+                session_type VARCHAR(50) NOT NULL UNIQUE,
+                manus_task_id VARCHAR(100) NOT NULL,
+                manus_task_url VARCHAR(255),
+                session_date DATE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        logger.info("active_sessions table ensured")
+
+
+def set_active_session(session_type: str, task_id: str, task_url: str = None) -> bool:
+    """
+    Set or update the active session for a given type.
+    Replaces any existing session of the same type.
+    
+    Args:
+        session_type: Type of session (e.g., 'athena_thinking', 'agenda_workspace')
+        task_id: Manus task ID
+        task_url: Optional Manus task URL
+        
+    Returns:
+        True if successful
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO active_sessions (session_type, manus_task_id, manus_task_url, session_date, updated_at)
+            VALUES (%s, %s, %s, CURRENT_DATE, CURRENT_TIMESTAMP)
+            ON CONFLICT (session_type) DO UPDATE SET
+                manus_task_id = EXCLUDED.manus_task_id,
+                manus_task_url = EXCLUDED.manus_task_url,
+                session_date = EXCLUDED.session_date,
+                updated_at = CURRENT_TIMESTAMP
+        """, (session_type, task_id, task_url))
+        logger.info(f"Set active session: {session_type} = {task_id}")
+        return True
+
+
+def get_active_session(session_type: str) -> Optional[dict]:
+    """
+    Get the active session for a given type.
+    
+    Args:
+        session_type: Type of session to retrieve
+        
+    Returns:
+        Session dict with task_id, task_url, session_date, or None if not found
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT manus_task_id, manus_task_url, session_date, updated_at
+            FROM active_sessions
+            WHERE session_type = %s
+        """, (session_type,))
+        return cursor.fetchone()
+
+
+def get_all_active_sessions() -> list:
+    """
+    Get all active sessions.
+    
+    Returns:
+        List of all active session records
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT session_type, manus_task_id, manus_task_url, session_date, updated_at
+            FROM active_sessions
+            ORDER BY session_type
+        """)
+        return cursor.fetchall()
+
+
+def get_todays_thinking_session() -> Optional[dict]:
+    """
+    Get today's ATHENA THINKING session if it exists.
+    
+    Returns:
+        Session dict or None if no session for today
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT manus_task_id, manus_task_url, session_date, updated_at
+            FROM active_sessions
+            WHERE session_type = 'athena_thinking'
+            AND session_date = CURRENT_DATE
+        """)
+        return cursor.fetchone()

@@ -16,6 +16,9 @@ from db.neon import (
     get_latest_synthesis,
     get_pending_drafts,
     get_canonical_memory,
+    get_all_active_sessions,
+    get_todays_thinking_session,
+    ensure_active_sessions_table,
 )
 
 logger = logging.getLogger("athena.api")
@@ -269,3 +272,58 @@ async def trigger_morning_sessions(background_tasks: BackgroundTasks):
     background_tasks.add_task(create_athena_thinking)
     background_tasks.add_task(create_agenda_workspace)
     return {"message": "Morning sessions triggered", "status": "running"}
+
+
+# Active Sessions endpoints
+@router.get("/sessions/active")
+async def get_active_sessions():
+    """
+    Get all active Manus sessions.
+    Returns session IDs that Athena can use throughout the day.
+    """
+    try:
+        sessions = get_all_active_sessions()
+        return {
+            "count": len(sessions),
+            "sessions": sessions
+        }
+    except Exception as e:
+        logger.error(f"Failed to get active sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions/thinking")
+async def get_thinking_session():
+    """
+    Get today's ATHENA THINKING session.
+    This is the session Athena should use for deeper analysis throughout the day.
+    """
+    try:
+        session = get_todays_thinking_session()
+        if not session:
+            return {
+                "status": "no_session",
+                "message": "No ATHENA THINKING session found for today",
+                "hint": "The morning session may not have run yet, or it's a new day"
+            }
+        return {
+            "status": "active",
+            "task_id": session['manus_task_id'],
+            "task_url": session['manus_task_url'],
+            "session_date": str(session['session_date']),
+            "updated_at": str(session['updated_at'])
+        }
+    except Exception as e:
+        logger.error(f"Failed to get thinking session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sessions/init-table")
+async def init_sessions_table():
+    """Initialize the active_sessions table if it doesn't exist."""
+    try:
+        ensure_active_sessions_table()
+        return {"status": "ok", "message": "active_sessions table initialized"}
+    except Exception as e:
+        logger.error(f"Failed to initialize sessions table: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
