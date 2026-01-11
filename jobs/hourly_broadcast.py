@@ -34,7 +34,7 @@ WORKSPACE_GUIDE_PAGE_ID = "2e5d44b3-a00b-813f-83fa-f3f3859d3ce8"
 
 # Active broadcast hours (London time)
 BROADCAST_START = time(5, 30)   # 5:30 AM
-BROADCAST_END = time(23, 30)    # 11:30 PM (extended for testing)
+BROADCAST_END = time(22, 30)    # 10:30 PM
 
 
 def is_active_hours() -> bool:
