@@ -1261,13 +1261,15 @@ def create_entity(
     """
     with db_cursor() as cursor:
         # aliases is an ARRAY type in the existing schema, not JSONB
+        # canonical_name is required in the existing schema
         cursor.execute("""
-            INSERT INTO entities (entity_type, name, description, aliases, metadata, access_tier, source, confidence)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO entities (entity_type, name, canonical_name, description, aliases, metadata, access_tier, source, confidence)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             entity_type,
             name,
+            name,  # canonical_name = name
             description,
             aliases or [],  # PostgreSQL ARRAY type
             json.dumps(metadata or {}),
