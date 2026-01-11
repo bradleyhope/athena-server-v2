@@ -149,6 +149,9 @@ async def spawn_thinking_session(
     today = datetime.now().strftime("%B %d, %Y")
     session_name = f"ATHENA THINKING {today}"
     
+    # Generate a session ID for think bursts (will be replaced with actual task_id after creation)
+    session_id = f"athena_thinking_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
     # Build the task prompt with collected data
     email_summary = f"{len(data.get('emails', []))} unread emails"
     event_summary = f"{len(data.get('events', []))} upcoming events"
@@ -228,6 +231,38 @@ This session is your workspace to think, analyze, and prepare. Bradley will see 
 - If you notice patterns or learn something new, call POST /api/brain/evolution
 - Record any performance observations
 
+## THINK BURSTS - BROADCAST YOUR THINKING
+
+**CRITICAL:** Throughout your work, periodically broadcast your thinking using the Think Bursts API.
+This makes your reasoning transparent and allows Bradley to see your thought process in real-time.
+
+### How to Log Thoughts
+POST to /api/thinking/log with:
+```json
+{{
+    "session_id": "{session_id}",
+    "thought_type": "observation|analysis|decision|question|insight|action",
+    "content": "Your thought here",
+    "confidence": 0.8,
+    "phase": "current_phase_name"
+}}
+```
+
+### When to Log Thoughts
+- **observation**: When you notice something significant in the data
+- **analysis**: When you're reasoning through a pattern or connection
+- **decision**: When you make a choice about priorities or actions
+- **question**: When you have a question for Bradley (save for Agenda & Workspace)
+- **insight**: When you discover something important
+- **action**: When you take or queue an action
+
+### Example Flow
+1. Start: Log "Starting analysis of 50 emails" (observation, phase: "email_analysis")
+2. Notice: Log "3 emails from investors in last hour" (observation, confidence: 0.9)
+3. Analyze: Log "Investor activity spike may indicate funding round interest" (analysis, confidence: 0.7)
+4. Decide: Log "Prioritizing investor emails for morning brief" (decision, confidence: 0.85)
+5. Question: Log "Should I draft responses to investor inquiries?" (question)
+
 ## BRAIN API
 Base URL: https://athena-server-0dce.onrender.com/api
 Auth: Bearer athena_api_key_2024
@@ -235,10 +270,13 @@ Auth: Bearer athena_api_key_2024
 - GET /brain/full-context - Your complete context
 - POST /brain/evolution - Propose learnings
 - POST /brain/actions - Queue actions for approval
+- POST /thinking/log - **Log your thoughts (Think Bursts)**
+- GET /thinking/status/{session_id} - Check your thinking history
 
 ## REMEMBER
+- **LOG YOUR THOUGHTS** - Use Think Bursts throughout your session
 - This is YOUR thinking space - be thorough
-- Bradley can see this, so explain your reasoning
+- Bradley can see this AND your Think Bursts, so explain your reasoning
 - Don't ask Bradley questions here - save those for Agenda & Workspace
 - Focus on analysis and preparation
 """

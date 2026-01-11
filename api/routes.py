@@ -303,6 +303,75 @@ async def trigger_manus_test():
         return {"message": "Manus test failed", "error": str(e), "traceback": traceback.format_exc()}
 
 
+@router.get("/thinking/live")
+async def get_live_thinking():
+    """
+    Get live thinking status - shows what Athena is currently thinking.
+    This is a convenience endpoint that combines session info with recent thoughts.
+    """
+    from db.neon import db_cursor
+    from datetime import datetime, timedelta
+    
+    with db_cursor() as cursor:
+        # Get today's active thinking session
+        cursor.execute("""
+            SELECT manus_task_id, manus_task_url, updated_at
+            FROM active_sessions
+            WHERE session_type = 'athena_thinking'
+            AND session_date = CURRENT_DATE
+            ORDER BY updated_at DESC
+            LIMIT 1
+        """)
+        session_row = cursor.fetchone()
+        
+        session_info = None
+        if session_row:
+            session_info = {
+                "task_id": session_row[0],
+                "task_url": session_row[1],
+                "updated_at": session_row[2].isoformat() if session_row[2] else None
+            }
+        
+        # Get recent thoughts (last 2 hours)
+        since = datetime.utcnow() - timedelta(hours=2)
+        cursor.execute("""
+            SELECT id, session_id, thought_type, content, confidence, phase, created_at
+            FROM thinking_log
+            WHERE created_at > %s
+            ORDER BY created_at DESC
+            LIMIT 20
+        """, (since,))
+        
+        thoughts = [
+            {
+                "id": str(row[0]),
+                "session_id": row[1],
+                "type": row[2],
+                "content": row[3][:200] + "..." if len(row[3]) > 200 else row[3],
+                "confidence": row[4],
+                "phase": row[5],
+                "timestamp": row[6].isoformat() if row[6] else None
+            }
+            for row in cursor.fetchall()
+        ]
+        
+        # Get thought type counts for today
+        cursor.execute("""
+            SELECT thought_type, COUNT(*)
+            FROM thinking_log
+            WHERE created_at > CURRENT_DATE
+            GROUP BY thought_type
+        """)
+        type_counts = {row[0]: row[1] for row in cursor.fetchall()}
+    
+    return {
+        "status": "active" if thoughts else "idle",
+        "session": session_info,
+        "thought_counts_today": type_counts,
+        "recent_thoughts": thoughts
+    }
+
+
 @router.post("/trigger/morning-sessions")
 async def trigger_morning_sessions(background_tasks: BackgroundTasks):
     """Manually trigger morning Manus sessions."""

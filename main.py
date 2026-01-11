@@ -39,6 +39,7 @@ from db.neon import get_db_connection, check_db_health
 from api.routes import router as api_router
 from api.brain_routes import router as brain_router
 from api.session_init import router as session_router
+from api.thinking_routes import router as thinking_router
 
 # Configure logging
 logging.basicConfig(
@@ -259,6 +260,7 @@ async def public_health_check():
 app.include_router(api_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(brain_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(session_router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(thinking_router, prefix="/api", dependencies=[Depends(verify_api_key)])
 
 
 if __name__ == "__main__":
