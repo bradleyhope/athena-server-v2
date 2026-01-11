@@ -1260,6 +1260,7 @@ def create_entity(
         UUID of the created entity
     """
     with db_cursor() as cursor:
+        # aliases is an ARRAY type in the existing schema, not JSONB
         cursor.execute("""
             INSERT INTO entities (entity_type, name, description, aliases, metadata, access_tier, source, confidence)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -1268,7 +1269,7 @@ def create_entity(
             entity_type,
             name,
             description,
-            json.dumps(aliases or []),
+            aliases or [],  # PostgreSQL ARRAY type
             json.dumps(metadata or {}),
             access_tier,
             source,
