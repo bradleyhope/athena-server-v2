@@ -129,6 +129,7 @@ def setup_scheduled_jobs():
     from jobs.weekly_rebuild import run_weekly_rebuild
     from jobs.notion_sync import run_notion_sync
     from jobs.evolution_engine import run_evolution_engine
+    from jobs.hourly_broadcast import run_hourly_broadcast
     
     # Observation burst - every 30 minutes
     scheduler.add_job(
@@ -208,6 +209,15 @@ def setup_scheduled_jobs():
         CronTrigger(day_of_week="sun", hour=2, minute=0),
         id="evolution_engine",
         name="Evolution Engine (Brain Learning)",
+        replace_existing=True
+    )
+    
+    # Hourly broadcast - every hour on the hour (6am-10pm London)
+    scheduler.add_job(
+        run_hourly_broadcast,
+        CronTrigger(hour="6-22", minute=0),
+        id="hourly_broadcast",
+        name="Hourly Thought Broadcast",
         replace_existing=True
     )
     

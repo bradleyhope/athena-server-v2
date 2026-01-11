@@ -222,13 +222,64 @@ The Agenda & Workspace session will present your findings to him.
 async def create_agenda_workspace_session() -> Optional[Dict]:
     """
     Create the daily Agenda & Workspace session for Bradley.
-    This presents Athena's findings and gets user input.
+    This is the ALWAYS-ON session that stays open all day.
+    It receives hourly broadcasts from Athena and has recalibration tools.
     Now uses brain-driven system prompt.
     """
     today = datetime.now().strftime("%B %d, %Y")
     session_name = f"Agenda & Workspace - {today}"
     
     task_prompt = f"""This is Bradley's daily Agenda & Workspace session for {today}.
+
+## THIS SESSION IS SPECIAL
+This is the **always-on session** that stays open all day. You will:
+1. Present the morning brief to Bradley
+2. **Receive hourly broadcasts from ATHENA THINKING** throughout the day
+3. Triage and present Athena's thoughts to Bradley
+4. Help Bradley recalibrate Athena when her thinking is off-base
+5. Collaborate with Bradley to respond to Athena's questions
+
+## ATHENA BROADCASTS
+Every hour, you will receive a thought transmission from Athena containing:
+- Recent observations and patterns
+- Questions Athena wants to ask Bradley
+- Insights and learning opportunities
+- Pending actions awaiting approval
+
+When a broadcast arrives, you should:
+1. Triage it (is this important right now?)
+2. Present relevant items to Bradley
+3. Help Bradley respond if needed
+4. Mark items as reviewed in Notion (Athena Broadcasts database)
+
+## RECALIBRATION TOOLS
+If Athena's thinking is off-base, you can help recalibrate her:
+
+### 1. Dismiss a Thought
+If a broadcast is not useful:
+- Mark it as "Dismissed" in Notion
+- Optionally explain why to help Athena learn
+
+### 2. Correct a Pattern
+If Athena detected a wrong pattern:
+- POST /api/brain/feedback with:
+  - feedback_type: "correction"
+  - content: "The pattern about X is incorrect because Y"
+  - context: {{relevant details}}
+
+### 3. Adjust a Boundary
+If Athena is being too cautious or not cautious enough:
+- POST /api/brain/evolution with:
+  - evolution_type: "boundary_adjustment"
+  - proposal: "Adjust boundary X to Y"
+  - rationale: "Because Z"
+
+### 4. Answer a Question
+If Athena asks a learning question:
+- POST /api/brain/feedback with:
+  - feedback_type: "answer"
+  - content: "The answer to your question is..."
+  - context: {{the original question}}
 
 ## BRAIN 2.0 INITIALIZATION
 Your context is loaded from the brain (Neon PostgreSQL). The system prompt contains your:
@@ -237,7 +288,7 @@ Your context is loaded from the brain (Neon PostgreSQL). The system prompt conta
 - Values (how to make decisions)
 - Workflows (how to accomplish tasks)
 
-## YOUR TASKS
+## YOUR MORNING TASKS
 1. Call GET /api/brain/session-brief/agenda_workspace to confirm your context
 2. Present the morning brief to Bradley:
    
@@ -267,13 +318,23 @@ Your context is loaded from the brain (Neon PostgreSQL). The system prompt conta
 5. Log feedback via POST /api/brain/feedback
 
 ## BRAIN API
-Base URL: https://athena-server-v2.onrender.com/api/brain
-- GET /session-brief/agenda_workspace - Your context
-- GET /actions/pending - Pending actions
-- GET /evolution?status=proposed - Evolution proposals
-- POST /feedback - Log user feedback
+Base URL: https://athena-server-0dce.onrender.com/api
+Auth: Bearer athena_api_key_2024
+
+Key endpoints:
+- GET /brain/session-brief/agenda_workspace - Your context
+- GET /brain/actions/pending - Pending actions
+- GET /brain/evolution?status=proposed - Evolution proposals
+- POST /brain/feedback - Log user feedback
+- POST /brain/evolution - Propose changes
+
+## NOTION RESOURCES
+- Athena Broadcasts: 70b8cb6eff9845d98492ce16c4e2e9aa (hourly thought transmissions)
+- Athena Tasks: 2e3d44b3-a00b-8122-8ec9-e3ba2b9a8c28 (task database)
+- Athena Command Center: 2e3d44b3-a00b-81ab-bbda-ced57f8c345d
 
 Be conversational but efficient. Bradley values brevity.
+Stay alert for incoming broadcasts throughout the day.
 """
     
     result = await create_manus_task(
@@ -306,7 +367,7 @@ async def create_observation_burst_session() -> Optional[Dict]:
 
 This is a quick collection task - don't do deep analysis.
 
-Brain API: https://athena-server-v2.onrender.com/api/brain
+Brain API: https://athena-server-0dce.onrender.com/api/brain
 - POST /evolution to log any patterns noticed
 """
     

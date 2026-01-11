@@ -435,3 +435,141 @@ async def init_sessions_table():
     except Exception as e:
         logger.error(f"Failed to initialize sessions table: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trigger/hourly-broadcast")
+async def trigger_hourly_broadcast(background_tasks: BackgroundTasks):
+    """Manually trigger an hourly thought broadcast."""
+    from jobs.hourly_broadcast import run_hourly_broadcast
+    
+    background_tasks.add_task(run_hourly_broadcast)
+    return {"message": "Hourly broadcast triggered", "status": "running"}
+
+
+@router.post("/trigger/hourly-broadcast-sync")
+async def trigger_hourly_broadcast_sync():
+    """Synchronously trigger an hourly thought broadcast (for testing)."""
+    from jobs.hourly_broadcast import run_hourly_broadcast
+    
+    try:
+        result = await run_hourly_broadcast()
+        return {"message": "Hourly broadcast completed", "result": result}
+    except Exception as e:
+        import traceback
+        return {"message": "Hourly broadcast failed", "error": str(e), "traceback": traceback.format_exc()}
+
+
+@router.post("/sessions/send-message")
+async def send_message_to_session(
+    session_type: str,
+    message: str
+):
+    """
+    Send a message to an active Manus session.
+    This is used for hourly broadcasts and other notifications.
+    
+    Args:
+        session_type: Type of session (workspace_agenda, athena_thinking)
+        message: The message content to send
+    """
+    from db.neon import get_active_session
+    import httpx
+    
+    # Get the active session
+    session = get_active_session(session_type)
+    if not session:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"No active {session_type} session found"
+        )
+    
+    task_id = session.get('manus_task_id')
+    if not task_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Session has no task_id"
+        )
+    
+    # Send message to the Manus session
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{settings.MANUS_API_BASE}/tasks/{task_id}/messages",
+                headers={
+                    "API_KEY": settings.MANUS_API_KEY,
+                    "Content-Type": "application/json"
+                },
+                json={"content": message}
+            )
+            
+            if response.status_code in [200, 201]:
+                return {
+                    "status": "sent",
+                    "task_id": task_id,
+                    "message_length": len(message)
+                }
+            else:
+                logger.warning(f"Failed to send message to Manus: {response.status_code}")
+                return {
+                    "status": "failed",
+                    "error": f"Manus API returned {response.status_code}",
+                    "task_id": task_id
+                }
+    except Exception as e:
+        logger.error(f"Error sending message to session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/broadcasts/recent")
+async def get_recent_broadcasts():
+    """
+    Get recent broadcasts from the Athena Broadcasts Notion database.
+    This is a convenience endpoint for checking what's been broadcast.
+    """
+    import httpx
+    
+    notion_api_key = settings.NOTION_API_KEY
+    if not notion_api_key:
+        raise HTTPException(status_code=500, detail="NOTION_API_KEY not configured")
+    
+    broadcasts_db_id = "70b8cb6eff9845d98492ce16c4e2e9aa"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"https://api.notion.com/v1/databases/{broadcasts_db_id}/query",
+                headers={
+                    "Authorization": f"Bearer {notion_api_key}",
+                    "Content-Type": "application/json",
+                    "Notion-Version": "2022-06-28"
+                },
+                json={
+                    "sorts": [{"property": "Timestamp", "direction": "descending"}],
+                    "page_size": 10
+                }
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                broadcasts = []
+                for page in data.get("results", []):
+                    props = page.get("properties", {})
+                    broadcasts.append({
+                        "id": page.get("id"),
+                        "title": props.get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", ""),
+                        "type": props.get("Type", {}).get("select", {}).get("name", ""),
+                        "priority": props.get("Priority", {}).get("select", {}).get("name", ""),
+                        "status": props.get("Status", {}).get("select", {}).get("name", ""),
+                        "timestamp": props.get("Timestamp", {}).get("date", {}).get("start", "")
+                    })
+                return {"count": len(broadcasts), "broadcasts": broadcasts}
+            else:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Notion API error: {response.text}"
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching broadcasts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
