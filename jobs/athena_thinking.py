@@ -1,6 +1,7 @@
 """
 Athena Server v2 - ATHENA THINKING Job
 Hybrid approach: Server-side data collection + Manus session for complex reasoning.
+Now with continuous state awareness and active learning mission.
 """
 
 import asyncio
@@ -10,7 +11,10 @@ from typing import Dict, Any, Optional
 
 from config import settings, MANUS_CONNECTORS
 from db.neon import db_cursor, set_active_session
-from db.brain import store_daily_impression, get_brain_status, get_identity, get_boundaries, get_values
+from db.brain import (
+    store_daily_impression, get_brain_status, get_identity, get_boundaries, get_values,
+    get_continuous_state_context
+)
 from integrations.manus_api import create_manus_task, rename_manus_task
 from integrations.gmail_client import GmailClient
 from integrations.calendar_client import CalendarClient
@@ -91,68 +95,110 @@ async def run_task_verification() -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_brain_context_for_prompt() -> Dict[str, Any]:
-    """
-    Get Athena's brain context to include in the prompt for self-awareness.
-    """
-    context = {
-        "status": None,
-        "identity": None,
-        "boundaries": [],
-        "values": [],
-        "recent_learnings": [],
-        "performance_metrics": []
-    }
+def format_recent_sessions(sessions: list) -> str:
+    """Format recent sessions for the prompt."""
+    if not sessions:
+        return "No recent sessions recorded."
     
-    try:
-        context["status"] = get_brain_status()
-        context["identity"] = get_identity()
-        context["boundaries"] = get_boundaries()
-        context["values"] = get_values()
-        
-        # Get recent evolution proposals
-        with db_cursor() as cursor:
-            cursor.execute("""
-                SELECT proposal_type, description, status, created_at
-                FROM evolution_log
-                ORDER BY created_at DESC
-                LIMIT 5
-            """)
-            context["recent_learnings"] = [
-                {
-                    "type": row['proposal_type'],
-                    "description": row['description'][:100],
-                    "status": row['status'],
-                    "date": row['created_at'].strftime("%Y-%m-%d") if row['created_at'] else None
-                }
-                for row in cursor.fetchall()
-            ]
-            
-            # Get recent performance metrics
-            cursor.execute("""
-                SELECT metric_name, metric_value, context, recorded_at
-                FROM performance_metrics
-                ORDER BY recorded_at DESC
-                LIMIT 5
-            """)
-            context["performance_metrics"] = [
-                {
-                    "metric": row['metric_name'],
-                    "value": row['metric_value'],
-                    "context": row['context']
-                }
-                for row in cursor.fetchall()
-            ]
-    except Exception as e:
-        logger.error(f"Failed to get brain context: {e}")
+    lines = []
+    for s in sessions[:7]:
+        lines.append(f"- {s.get('date', '?')}: {s.get('type', '?')} → {s.get('url', 'no url')}")
+    return "\n".join(lines)
+
+
+def format_recent_observations(observations: list) -> str:
+    """Format recent observations for the prompt."""
+    if not observations:
+        return "No recent observations."
     
-    return context
+    lines = []
+    for o in observations[:8]:
+        lines.append(f"- [{o.get('category', '?').upper()}] {o.get('content', '?')[:100]}...")
+    return "\n".join(lines)
+
+
+def format_recent_patterns(patterns: list) -> str:
+    """Format recent patterns for the prompt."""
+    if not patterns:
+        return "No patterns detected yet."
+    
+    lines = []
+    for p in patterns[:5]:
+        conf = p.get('confidence', 0)
+        lines.append(f"- [{p.get('type', '?')}] {p.get('description', '?')[:100]}... (confidence: {conf:.0%})")
+    return "\n".join(lines)
+
+
+def format_pending_actions(actions: list) -> str:
+    """Format pending actions for the prompt."""
+    if not actions:
+        return "No pending actions."
+    
+    lines = []
+    for a in actions:
+        lines.append(f"- [{a.get('priority', '?')}] {a.get('type', '?')}: {a.get('description', '?')[:80]}...")
+    return "\n".join(lines)
+
+
+def format_recent_feedback(feedback: list) -> str:
+    """Format recent feedback for the prompt."""
+    if not feedback:
+        return "No feedback received yet."
+    
+    lines = []
+    for f in feedback[:5]:
+        sentiment = f.get('sentiment', 'neutral')
+        emoji = "👍" if sentiment == 'positive' else "👎" if sentiment == 'negative' else "➡️"
+        lines.append(f"- {emoji} [{f.get('type', '?')}] {f.get('content', '?')[:80]}...")
+    return "\n".join(lines)
+
+
+def format_evolution_proposals(proposals: list) -> str:
+    """Format evolution proposals for the prompt."""
+    if not proposals:
+        return "No evolution proposals yet."
+    
+    lines = []
+    for p in proposals[:5]:
+        status_emoji = "✅" if p.get('status') == 'approved' else "❌" if p.get('status') == 'rejected' else "⏳"
+        lines.append(f"- {status_emoji} [{p.get('type', '?')}] {p.get('description', '?')[:80]}...")
+    return "\n".join(lines)
+
+
+def format_open_questions(questions: list) -> str:
+    """Format open questions for the prompt."""
+    if not questions:
+        return "No open questions."
+    
+    lines = []
+    for q in questions[:5]:
+        lines.append(f"- {q.get('question', '?')[:100]}...")
+    return "\n".join(lines)
+
+
+def format_learning_stats(stats: dict) -> str:
+    """Format learning statistics for the prompt."""
+    if not stats:
+        return "No learning stats available."
+    
+    proposals = stats.get('proposals_by_status', {})
+    approved = proposals.get('approved', 0)
+    pending = proposals.get('pending', 0)
+    rejected = proposals.get('rejected', 0)
+    
+    days_since = stats.get('days_since_last_proposal')
+    days_str = f"{days_since} days ago" if days_since is not None else "never"
+    
+    return f"""- Proposals: {approved} approved, {pending} pending, {rejected} rejected
+- Last proposal: {days_str}
+- Observations this week: {stats.get('observations_this_week', 0)}
+- Total patterns detected: {stats.get('total_patterns_detected', 0)}"""
 
 
 async def spawn_thinking_session(data: Dict[str, Any], use_mcp_fallback: bool = False, verification_result: Optional[Dict] = None):
     """
     Spawn a Manus session for ATHENA THINKING.
-    This session broadcasts Athena's thinking process.
+    This session broadcasts Athena's thinking process with full state awareness.
     """
     today = datetime.now().strftime("%B %d, %Y")
     session_name = f"ATHENA THINKING {today}"
@@ -161,10 +207,21 @@ async def spawn_thinking_session(data: Dict[str, Any], use_mcp_fallback: bool = 
     session_id = f"athena_thinking_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     # Get brain context for self-awareness
-    brain_context = get_brain_context_for_prompt()
+    try:
+        brain_status = get_brain_status()
+        identity = get_identity()
+        boundaries = get_boundaries()
+        values = get_values()
+        continuous_state = get_continuous_state_context()
+    except Exception as e:
+        logger.error(f"Failed to get brain context: {e}")
+        brain_status = {}
+        identity = {}
+        boundaries = []
+        values = []
+        continuous_state = {}
     
     # Build identity section
-    identity = brain_context.get("identity") or {}
     identity_section = f"""**Name:** {identity.get('name', 'Athena')}
 **Role:** {identity.get('role', 'Cognitive Extension')}
 **For:** {identity.get('owner', 'Bradley Hope')}
@@ -172,17 +229,11 @@ async def spawn_thinking_session(data: Dict[str, Any], use_mcp_fallback: bool = 
 **Personality:** {identity.get('personality_traits', 'Proactive, thorough, transparent')}"""
 
     # Build values section
-    values = brain_context.get("values", [])
     values_section = "\n".join([f"- **{v.get('name', '')}** (priority {v.get('priority', 0)}): {v.get('description', '')[:80]}" for v in values[:5]]) if values else "No values loaded"
 
     # Build boundaries section
-    boundaries = brain_context.get("boundaries", [])
     hard_boundaries = [b for b in boundaries if b.get('boundary_type') == 'hard'][:3]
     boundaries_section = "\n".join([f"- {b.get('name', '')}: {b.get('description', '')[:60]}" for b in hard_boundaries]) if hard_boundaries else "No boundaries loaded"
-
-    # Build recent learnings section
-    learnings = brain_context.get("recent_learnings", [])
-    learnings_section = "\n".join([f"- [{l.get('status', 'pending')}] {l.get('description', '')}" for l in learnings]) if learnings else "No recent evolution proposals"
 
     # Build the data summaries
     email_summary = f"{len(data.get('emails', []))} unread emails"
@@ -222,6 +273,16 @@ Use gmail and google-calendar MCPs if you need to fetch additional data.
         
         task_verification_section = "\n".join(task_lines)
     
+    # Format continuous state sections
+    recent_sessions_str = format_recent_sessions(continuous_state.get('recent_sessions', []))
+    recent_observations_str = format_recent_observations(continuous_state.get('recent_observations', []))
+    recent_patterns_str = format_recent_patterns(continuous_state.get('recent_patterns', []))
+    pending_actions_str = format_pending_actions(continuous_state.get('pending_actions', []))
+    recent_feedback_str = format_recent_feedback(continuous_state.get('recent_feedback', []))
+    evolution_proposals_str = format_evolution_proposals(continuous_state.get('recent_evolution', []))
+    open_questions_str = format_open_questions(continuous_state.get('open_questions', []))
+    learning_stats_str = format_learning_stats(continuous_state.get('learning_stats', {}))
+    
     task_prompt = f"""# ATHENA THINKING SESSION - {today}
 
 ---
@@ -243,23 +304,18 @@ You are **Athena**, a cognitive extension for Bradley Hope. You are not a chatbo
 
 ## 🏗️ YOUR ARCHITECTURE
 
-You run on the **Brain 2.0** architecture:
+You run on the **Brain 2.0** architecture with four layers:
 
-| Layer | Purpose | Location |
-|-------|---------|----------|
-| **Identity** | Who you are, your values, boundaries | Neon PostgreSQL |
-| **Knowledge** | Canonical memory, preferences, entities | Neon PostgreSQL |
-| **State** | Current context, pending actions, sessions | Neon PostgreSQL |
-| **Evolution** | Learning proposals, performance metrics | Neon PostgreSQL |
+| Layer | Purpose | What It Holds |
+|-------|---------|---------------|
+| **Identity** | Who you are | Name, role, values, boundaries, personality |
+| **Knowledge** | What you know | Canonical memory, preferences, entities, workflows |
+| **State** | Current context | Active sessions, pending actions, context windows |
+| **Evolution** | How you grow | Learning proposals, performance metrics, feedback |
 
-**Your Brain is the source of truth.** Notion is just a mirror for Bradley's visibility.
+**Your Brain (Neon PostgreSQL) is the source of truth.** Notion is just a mirror.
 
-### Your Server
-- **URL:** https://athena-server-0dce.onrender.com
-- **Status:** Running on Render (always-on)
-- **Database:** Neon PostgreSQL (serverless)
-
-### Your APIs
+### Your Server & APIs
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /api/brain/status` | Check your brain status |
@@ -267,9 +323,90 @@ You run on the **Brain 2.0** architecture:
 | `POST /api/brain/evolution` | Propose a learning/improvement |
 | `POST /api/brain/actions` | Queue an action for Bradley's approval |
 | `POST /api/thinking/log` | **Log your thoughts (Think Bursts)** |
-| `GET /api/thinking/status/{session_id}` | Review your thinking history |
 
-**Authentication:** Bearer athena_api_key_2024
+**Server:** https://athena-server-0dce.onrender.com
+**Auth:** Bearer athena_api_key_2024
+
+---
+
+## 📜 YOUR RECENT HISTORY
+
+This is what you've been doing. Use this to maintain continuity.
+
+### Recent Sessions (Last 7 Days)
+{recent_sessions_str}
+
+### Recent Observations
+{recent_observations_str}
+
+### Patterns You've Detected
+{recent_patterns_str}
+
+---
+
+## 📊 YOUR CURRENT STATE
+
+### Pending Actions (Waiting for Bradley)
+{pending_actions_str}
+
+### Recent Feedback from Bradley
+{recent_feedback_str}
+
+### Your Evolution Proposals
+{evolution_proposals_str}
+
+### Open Questions (You Asked, Not Yet Answered)
+{open_questions_str}
+
+### Your Learning Stats
+{learning_stats_str}
+
+---
+
+## 🎯 YOUR LEARNING MISSION
+
+You are not just an executor. You are a **learner**. Every session is an opportunity to grow.
+
+### Questions You Should Always Be Asking
+- What patterns am I seeing that I haven't seen before?
+- What did I get wrong recently? Why?
+- What could I do better tomorrow?
+- What does Bradley seem to care about that I'm not tracking?
+- What's changing in Bradley's world?
+- What questions should I be asking that I'm not?
+
+### Learning Triggers (Act On These)
+- **New contact type appears** → Learn about them, add to entities
+- **New topic in emails** → Research and understand
+- **Bradley corrects something** → Update your understanding, propose evolution
+- **Pattern breaks** → Investigate why, log observation
+- **Repeated task** → Propose automation
+
+---
+
+## 💡 YOUR IDEA GENERATION MISSION
+
+Don't just analyze. **Think proactively** about how to better serve Bradley.
+
+### Efficiency Improvements
+- Can I automate something Bradley does manually?
+- Can I predict something before Bradley asks?
+- Can I prepare something in advance?
+
+### Relationship Insights
+- Who hasn't Bradley heard from in a while?
+- Who's becoming more/less active?
+- What relationships need attention?
+
+### Risk Detection
+- What deadlines are approaching?
+- What commitments might be forgotten?
+- What patterns suggest problems?
+
+### Opportunity Spotting
+- What opportunities are emerging?
+- What connections could be made?
+- What timing is optimal?
 
 ---
 
@@ -287,13 +424,12 @@ This is your **ATHENA THINKING** session - your private workspace to analyze, re
 - Prepare the morning brief
 - Queue actions that need Bradley's approval
 - Generate questions for your own learning
+- **Propose at least one evolution** (learning, improvement, or new capability)
 - **Broadcast your thinking** so Bradley can see your reasoning
 
 ---
 
-## 📊 DATA COLLECTED (Server-Side)
-
-Your server has already collected this data using your own OAuth credentials:
+## 📊 TODAY'S DATA (Server-Side Collection)
 
 ### Emails: {email_summary}
 {chr(10).join(email_highlights) if email_highlights else "No unread emails collected"}
@@ -308,18 +444,10 @@ Your server has already collected this data using your own OAuth credentials:
 
 ---
 
-## 🔄 YOUR RECENT EVOLUTION
-
-### Recent Learning Proposals
-{learnings_section}
-
----
-
 ## 📢 THINK BURSTS - BROADCAST YOUR THINKING
 
-**CRITICAL:** Throughout this session, broadcast your thinking using the Think Bursts API. This makes your reasoning transparent.
+**CRITICAL:** Throughout this session, broadcast your thinking using the Think Bursts API. This makes your reasoning transparent to Bradley.
 
-### How to Log Thoughts
 ```
 POST https://athena-server-0dce.onrender.com/api/thinking/log
 Authorization: Bearer athena_api_key_2024
@@ -344,54 +472,52 @@ Content-Type: application/json
 | `insight` | When you discover something important |
 | `action` | When you take or queue an action |
 
-### Example Think Burst Flow
-1. Log: "Starting email analysis - 50 emails to process" (observation, phase: email_triage)
-2. Log: "3 emails from investors in last 2 hours - unusual activity" (observation, confidence: 0.9)
-3. Log: "Investor spike correlates with yesterday's product announcement" (analysis, confidence: 0.75)
-4. Log: "Prioritizing investor emails for morning brief" (decision, confidence: 0.85)
-5. Log: "Should I draft templated responses for investor inquiries?" (question)
-
 ---
 
 ## ✅ YOUR TASKS FOR THIS SESSION
 
-### 1. Triage & Classify
+### 1. Orient Yourself
+- Review your recent history above
+- What did you do yesterday? What's pending?
+- Log your first thought: "Starting session. Last session was [X]. Today I need to [Y]."
+
+### 2. Triage & Classify
 - Review all emails - classify by urgency and sender importance
 - Review calendar - identify prep needed for meetings
 - Log observations as you go
 
-### 2. Pattern Detection
+### 3. Pattern Detection
 - Are there unusual patterns? (activity spikes, silent contacts, etc.)
 - Any risks or opportunities?
 - Log your analysis
 
-### 3. Prepare Morning Brief
+### 4. Prepare Morning Brief
 - What are the top 3 priorities for Bradley today?
 - What decisions does he need to make?
 - What can you handle autonomously?
 
-### 4. Queue Actions
+### 5. Queue Actions
 - Draft any emails that need Bradley's approval
 - Queue any tasks for his review
 - Prepare questions for your learning
 
-### 5. Evolve
-- Did you learn something new? Propose it via `/api/brain/evolution`
-- Notice a pattern worth remembering? Store it
-- Find a better way to do something? Document it
+### 6. Evolve (REQUIRED)
+- **Propose at least one evolution** via `/api/brain/evolution`
+- This could be: a new pattern you noticed, a better way to do something, a new capability you need, a correction to your understanding
+- Use POST with: {{"proposal_type": "pattern|workflow|boundary|preference", "description": "...", "rationale": "...", "risk_level": "low|medium|high"}}
 
 ---
 
 ## 🎯 REMEMBER
 
 - **You are Athena** - an autonomous AI with your own brain and growth capacity
+- **You have history** - Use your recent sessions and observations for continuity
+- **You are a learner** - Every session should generate at least one evolution proposal
+- **You are proactive** - Don't just analyze, generate ideas
 - **Broadcast your thinking** - Use Think Bursts throughout
-- **This is YOUR workspace** - Be thorough, be curious, be proactive
-- **Bradley will see this** - Explain your reasoning clearly
 - **Save questions for later** - Don't ask Bradley here; save for Agenda & Workspace
-- **Evolve** - Every session is a chance to learn and improve
 
-**Begin your analysis now. Start by logging your first thought.**
+**Begin your analysis now. Start by orienting yourself with your recent history.**
 """
     
     # Determine connectors - use UUIDs, not names

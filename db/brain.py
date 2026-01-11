@@ -973,3 +973,257 @@ def set_preference(category: str, key: str, value: str, confidence: float = 0.5,
             RETURNING id
         """, (category, key, value, confidence, source, learned_from))
         return str(cursor.fetchone()['id'])
+
+
+# =============================================================================
+# CONTINUOUS STATE CONTEXT (for self-awareness)
+# =============================================================================
+
+def get_recent_sessions(days: int = 7) -> List[Dict]:
+    """Get recent Athena sessions for continuity."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT session_type, session_date, manus_task_id, manus_task_url, updated_at
+            FROM active_sessions
+            WHERE session_date >= CURRENT_DATE - INTERVAL '%s days'
+            ORDER BY session_date DESC, updated_at DESC
+        """, (days,))
+        return [
+            {
+                "type": row['session_type'],
+                "date": row['session_date'].strftime("%Y-%m-%d") if row['session_date'] else None,
+                "task_id": row['manus_task_id'],
+                "url": row['manus_task_url']
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_recent_observations(limit: int = 10) -> List[Dict]:
+    """Get recent observations for context."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT category, content, source, confidence, created_at
+            FROM observations
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (limit,))
+        return [
+            {
+                "category": row['category'],
+                "content": row['content'][:150] if row['content'] else None,
+                "source": row['source'],
+                "confidence": row['confidence'],
+                "when": row['created_at'].strftime("%Y-%m-%d %H:%M") if row['created_at'] else None
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_recent_patterns(limit: int = 5) -> List[Dict]:
+    """Get recent detected patterns."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT pattern_type, description, confidence, evidence_count, detected_at
+            FROM patterns
+            ORDER BY detected_at DESC
+            LIMIT %s
+        """, (limit,))
+        return [
+            {
+                "type": row['pattern_type'],
+                "description": row['description'][:150] if row['description'] else None,
+                "confidence": row['confidence'],
+                "evidence_count": row['evidence_count'],
+                "when": row['detected_at'].strftime("%Y-%m-%d") if row['detected_at'] else None
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_recent_synthesis(limit: int = 3) -> List[Dict]:
+    """Get recent synthesis/conclusions."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT synthesis_date, executive_summary, key_insights, synthesis_number
+            FROM synthesis_memory
+            WHERE executive_summary IS NOT NULL
+            ORDER BY synthesis_date DESC
+            LIMIT %s
+        """, (limit,))
+        return [
+            {
+                "date": row['synthesis_date'].strftime("%Y-%m-%d") if row['synthesis_date'] else None,
+                "summary": row['executive_summary'][:200] if row['executive_summary'] else None,
+                "insights": row['key_insights'][:200] if row['key_insights'] else None,
+                "number": row['synthesis_number']
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_recent_impressions(limit: int = 5) -> List[Dict]:
+    """Get recent daily impressions."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT category, content, confidence_score, created_at
+            FROM synthesis_memory
+            WHERE content IS NOT NULL AND category IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (limit,))
+        return [
+            {
+                "category": row['category'],
+                "content": row['content'][:150] if row['content'] else None,
+                "confidence": row['confidence_score'],
+                "when": row['created_at'].strftime("%Y-%m-%d") if row['created_at'] else None
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_pending_actions_list() -> List[Dict]:
+    """Get all pending actions waiting for approval."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT action_type, description, priority, context, created_at
+            FROM pending_actions
+            WHERE status = 'pending'
+            ORDER BY priority DESC, created_at ASC
+        """)
+        return [
+            {
+                "type": row['action_type'],
+                "description": row['description'][:100] if row['description'] else None,
+                "priority": row['priority'],
+                "context": row['context'],
+                "waiting_since": row['created_at'].strftime("%Y-%m-%d %H:%M") if row['created_at'] else None
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_recent_feedback(limit: int = 5) -> List[Dict]:
+    """Get recent feedback from Bradley."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT feedback_type, content, sentiment, context, received_at
+            FROM feedback_history
+            ORDER BY received_at DESC
+            LIMIT %s
+        """, (limit,))
+        return [
+            {
+                "type": row['feedback_type'],
+                "content": row['content'][:150] if row['content'] else None,
+                "sentiment": row['sentiment'],
+                "context": row['context'],
+                "when": row['received_at'].strftime("%Y-%m-%d") if row['received_at'] else None
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_recent_evolution_proposals(limit: int = 5) -> List[Dict]:
+    """Get recent evolution/learning proposals."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT proposal_type, description, rationale, status, created_at, reviewed_at
+            FROM evolution_log
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (limit,))
+        return [
+            {
+                "type": row['proposal_type'],
+                "description": row['description'][:150] if row['description'] else None,
+                "rationale": row['rationale'][:100] if row['rationale'] else None,
+                "status": row['status'],
+                "proposed": row['created_at'].strftime("%Y-%m-%d") if row['created_at'] else None,
+                "reviewed": row['reviewed_at'].strftime("%Y-%m-%d") if row['reviewed_at'] else None
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_open_questions() -> List[Dict]:
+    """Get questions Athena has asked but not yet answered."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT content, phase, created_at
+            FROM thinking_log
+            WHERE thought_type = 'question'
+            AND created_at > CURRENT_DATE - INTERVAL '7 days'
+            ORDER BY created_at DESC
+            LIMIT 10
+        """)
+        return [
+            {
+                "question": row['content'],
+                "phase": row['phase'],
+                "asked": row['created_at'].strftime("%Y-%m-%d %H:%M") if row['created_at'] else None
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def get_learning_stats() -> Dict[str, Any]:
+    """Get statistics about Athena's learning activity."""
+    with db_cursor() as cursor:
+        # Count proposals by status
+        cursor.execute("""
+            SELECT status, COUNT(*) as count
+            FROM evolution_log
+            GROUP BY status
+        """)
+        status_counts = {row['status']: row['count'] for row in cursor.fetchall()}
+        
+        # Days since last proposal
+        cursor.execute("""
+            SELECT MAX(created_at) as last_proposal
+            FROM evolution_log
+        """)
+        row = cursor.fetchone()
+        last_proposal = row['last_proposal'] if row else None
+        days_since_proposal = None
+        if last_proposal:
+            days_since_proposal = (datetime.utcnow() - last_proposal).days
+        
+        # Total observations this week
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM observations
+            WHERE created_at > CURRENT_DATE - INTERVAL '7 days'
+        """)
+        observations_this_week = cursor.fetchone()['count']
+        
+        # Total patterns detected
+        cursor.execute("SELECT COUNT(*) as count FROM patterns")
+        total_patterns = cursor.fetchone()['count']
+        
+        return {
+            "proposals_by_status": status_counts,
+            "days_since_last_proposal": days_since_proposal,
+            "observations_this_week": observations_this_week,
+            "total_patterns_detected": total_patterns
+        }
+
+
+def get_continuous_state_context() -> Dict[str, Any]:
+    """
+    Get Athena's complete continuous state for self-awareness.
+    This is the main function to call for building the system prompt.
+    """
+    return {
+        "recent_sessions": get_recent_sessions(days=7),
+        "recent_observations": get_recent_observations(limit=10),
+        "recent_patterns": get_recent_patterns(limit=5),
+        "recent_synthesis": get_recent_synthesis(limit=3),
+        "recent_impressions": get_recent_impressions(limit=5),
+        "pending_actions": get_pending_actions_list(),
+        "recent_feedback": get_recent_feedback(limit=5),
+        "recent_evolution": get_recent_evolution_proposals(limit=5),
+        "open_questions": get_open_questions(),
+        "learning_stats": get_learning_stats()
+    }
