@@ -273,6 +273,18 @@ async def trigger_athena_thinking(background_tasks: BackgroundTasks):
     return {"message": "ATHENA THINKING triggered", "status": "running"}
 
 
+@router.post("/trigger/athena-thinking-sync")
+async def trigger_athena_thinking_sync():
+    """Synchronously trigger ATHENA THINKING for debugging."""
+    from jobs.athena_thinking import run_athena_thinking
+    
+    try:
+        result = await run_athena_thinking()
+        return {"message": "ATHENA THINKING completed", "result": result}
+    except Exception as e:
+        return {"message": "ATHENA THINKING failed", "error": str(e)}
+
+
 @router.post("/trigger/morning-sessions")
 async def trigger_morning_sessions(background_tasks: BackgroundTasks):
     """Manually trigger morning Manus sessions."""
