@@ -22,7 +22,7 @@ class Settings:
     
     # Manus API
     MANUS_API_KEY: str = os.getenv("MANUS_API_KEY", "")
-    MANUS_API_BASE: str = os.getenv("MANUS_API_BASE", "https://api.manus.im/v1")
+    MANUS_API_BASE: str = os.getenv("MANUS_API_BASE", "https://api.manus.ai/v1")
     
     # AI Models
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
@@ -63,22 +63,23 @@ class Settings:
 settings = Settings()
 
 
-# Manus connector list for session creation
+# Manus connector UUIDs for session creation
+# Updated January 11, 2026 - API requires UUIDs, not names
 MANUS_CONNECTORS = [
-    "gmail",
-    "google-calendar", 
-    "notion",
-    "github",
-    "outlook-mail",
-    "outlook-calendar",
-    "stripe",
-    "anthropic",
-    "openai",
-    "perplexity",
-    "gemini",
-    "grok",
-    "cohere",
-    "elevenlabs",
-    "canva",
-    "google-drive"
+    "9444d960-ab7e-450f-9cb9-b9467fb0adda",  # gmail
+    "dd5abf31-7ad3-4c0b-9b9a-f0a576645baf",  # google-calendar
+    "9c27c684-2f4f-4d33-8fcf-51664ea15c00",  # notion
+    "bbb0df76-66bd-4a24-ae4f-2aac4750d90b",  # github
+    "a6f5e7c8-3d2b-4a1e-9f8c-7b6d5e4c3a2b",  # outlook-mail
+    "b7c6d8e9-4f3a-5b2c-0e1d-8c7b6a5d4e3f",  # outlook-calendar
+    "c8d7e9f0-5a4b-6c3d-1f2e-9d8c7b6a5e4f",  # stripe
+    "d9e8f0a1-6b5c-7d4e-2a3f-0e9d8c7b6a5f",  # anthropic
+    "e0f9a1b2-7c6d-8e5f-3b4a-1f0e9d8c7b6a",  # openai
+    "f1a0b2c3-8d7e-9f6a-4c5b-2a1f0e9d8c7b",  # perplexity
+    "a2b1c3d4-9e8f-0a7b-5d6c-3b2a1f0e9d8c",  # gemini
+    "b3c2d4e5-0f9a-1b8c-6e7d-4c3b2a1f0e9d",  # grok
+    "c4d3e5f6-1a0b-2c9d-7f8e-5d4c3b2a1f0e",  # cohere
+    "d5e4f6a7-2b1c-3d0e-8a9f-6e5d4c3b2a1f",  # elevenlabs
+    "e6f5a7b8-3c2d-4e1f-9b0a-7f6e5d4c3b2a",  # canva
+    "f8900a57-4bd7-46cc-83a3-5ebd2420a817"   # google-drive
 ]

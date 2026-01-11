@@ -67,7 +67,7 @@ async def create_manus_task(
     }
     
     headers = {
-        "Authorization": f"Bearer {settings.MANUS_API_KEY}",
+        "API_KEY": settings.MANUS_API_KEY,
         "Content-Type": "application/json"
     }
     
@@ -108,7 +108,7 @@ async def rename_manus_task(task_id: str, name: str) -> bool:
         return False
     
     headers = {
-        "Authorization": f"Bearer {settings.MANUS_API_KEY}",
+        "API_KEY": settings.MANUS_API_KEY,
         "Content-Type": "application/json"
     }
     
