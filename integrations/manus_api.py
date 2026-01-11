@@ -79,10 +79,13 @@ async def create_manus_task(
     # Get brain-driven system prompt
     system_prompt = get_brain_system_prompt(session_type)
     
+    # Combine system prompt and task prompt into single prompt
+    # Manus API uses 'prompt' field, not 'system_prompt' + 'task_prompt'
+    full_prompt = f"{system_prompt}\n\n---\n\n{task_prompt}"
+    
     payload = {
         "model": model,
-        "system_prompt": system_prompt,
-        "task_prompt": task_prompt,
+        "prompt": full_prompt,
         "connectors": connectors
     }
     
