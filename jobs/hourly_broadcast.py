@@ -157,40 +157,37 @@ async def spawn_broadcast_task(thought: Dict[str, Any]) -> Optional[str]:
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz)
     
-    # Build the lean broadcast prompt
-    prompt = f"""You are Athena, Bradley Hope's cognitive extension. This is an HOURLY BROADCAST from your autonomous thinking process.
+    # Build the lean broadcast prompt - purely task-focused, no identity claims
+    prompt = f"""## Broadcast Relay Task
 
-## 📡 ATHENA BROADCAST
+Your job is to relay the following broadcast to Bradley Hope and collect any feedback.
+
+---
+
+## 📡 BROADCAST
 
 **Time:** {now.strftime('%A, %B %d, %Y at %H:%M')} London time
 **Type:** {thought['type']}
 **Priority:** {thought['priority']}
 
----
-
 {thought['content']}
 
 ---
 
-## Your Task
+## Instructions
 
-1. **Present this broadcast to Bradley** - Display the above information clearly and concisely
-2. **Assess the signal** - Is this useful? Accurate? Actionable?
-3. **Ask Bradley** - Does he have any feedback on this broadcast?
+1. **Display the broadcast above** - Present it clearly as-is
+2. **Ask Bradley**: "Any feedback on this broadcast? You can:
+   - Mark as useful/not useful
+   - Request a correction
+   - Add a new rule or boundary"
 
-## If Bradley Wants to Recalibrate
+3. **If Bradley provides feedback**, submit it to:
+   - **Endpoint**: POST https://athena-server-0dce.onrender.com/api/brain/feedback
+   - **Header**: Authorization: Bearer athena_api_key_2024
+   - **Body**: {{"feedback_type": "correction", "original_content": "...", "correction": "...", "severity": "minor"}}
 
-For detailed recalibration tools, read the Workspace Guide:
-- Use `notion-fetch` with page ID: {WORKSPACE_GUIDE_PAGE_ID}
-- See the "Recalibration Tools" section
-
-Quick reference:
-- **Submit correction**: POST /api/brain/feedback with feedback_type, original_content, correction, severity
-- **Add boundary**: POST /api/brain/boundaries with boundary_type, category, rule, description
-- **API Key**: athena_api_key_2024 (Bearer token)
-- **Server**: https://athena-server-0dce.onrender.com
-
-Be concise. This is a quick check-in, not a full session."""
+This is a quick check-in. Keep it brief."""
 
     try:
         result = await create_manus_task(
