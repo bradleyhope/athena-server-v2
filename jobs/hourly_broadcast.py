@@ -29,6 +29,9 @@ logger = logging.getLogger("athena.jobs.hourly_broadcast")
 # Athena Broadcasts database ID
 BROADCASTS_DATABASE_ID = "70b8cb6eff9845d98492ce16c4e2e9aa"
 
+# Reference pages
+WORKSPACE_GUIDE_PAGE_ID = "2e5d44b3-a00b-813f-83fa-f3f3859d3ce8"
+
 # Active broadcast hours (London time)
 BROADCAST_START = time(5, 30)   # 5:30 AM
 BROADCAST_END = time(22, 30)    # 10:30 PM
@@ -154,10 +157,11 @@ async def spawn_broadcast_task(thought: Dict[str, Any]) -> Optional[str]:
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz)
     
-    # Build the broadcast prompt
+    # Build the lean broadcast prompt
     prompt = f"""You are Athena, Bradley Hope's cognitive extension. This is an HOURLY BROADCAST from your autonomous thinking process.
 
 ## 📡 ATHENA BROADCAST
+
 **Time:** {now.strftime('%A, %B %d, %Y at %H:%M')} London time
 **Type:** {thought['type']}
 **Priority:** {thought['priority']}
@@ -170,17 +174,21 @@ async def spawn_broadcast_task(thought: Dict[str, Any]) -> Optional[str]:
 
 ## Your Task
 
-1. **Present this broadcast to Bradley** - Display the above information clearly
+1. **Present this broadcast to Bradley** - Display the above information clearly and concisely
 2. **Assess the signal** - Is this useful? Accurate? Actionable?
-3. **Provide your evaluation** - Brief assessment of the broadcast quality
-4. **Ask Bradley** - Does he have any feedback on this broadcast?
+3. **Ask Bradley** - Does he have any feedback on this broadcast?
 
-If Bradley indicates this broadcast is off-base or unhelpful:
-- Use POST https://athena-server-0dce.onrender.com/api/brain/feedback to submit a correction
-- Header: Authorization: Bearer athena_api_key_2024
-- Body: {{"feedback_type": "correction", "original_content": "...", "correction": "...", "severity": "minor|moderate|major"}}
+## If Bradley Wants to Recalibrate
 
-This helps Athena learn and improve her thinking.
+For detailed recalibration tools, read the Workspace Guide:
+- Use `notion-fetch` with page ID: {WORKSPACE_GUIDE_PAGE_ID}
+- See the "Recalibration Tools" section
+
+Quick reference:
+- **Submit correction**: POST /api/brain/feedback with feedback_type, original_content, correction, severity
+- **Add boundary**: POST /api/brain/boundaries with boundary_type, category, rule, description
+- **API Key**: athena_api_key_2024 (Bearer token)
+- **Server**: https://athena-server-0dce.onrender.com
 
 Be concise. This is a quick check-in, not a full session."""
 

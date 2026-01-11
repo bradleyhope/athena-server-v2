@@ -3,7 +3,7 @@ Athena Server v2 - Morning Sessions Job
 Creates Workspace & Agenda session via Manus API at 5:30 AM London time.
 This is Bradley's daily interactive workspace that receives broadcasts from Athena.
 
-Updated for Brain 2.0: Uses brain-driven system prompts and context.
+Updated for Brain 2.0: Lean prompts that reference Notion as source of truth.
 """
 
 import logging
@@ -25,91 +25,61 @@ from config import MANUS_CONNECTORS
 
 logger = logging.getLogger("athena.jobs.morning")
 
-# Workspace & Agenda Session Guide page ID
+# Reference pages in Notion
 WORKSPACE_GUIDE_PAGE_ID = "2e5d44b3-a00b-813f-83fa-f3f3859d3ce8"
+COMMAND_CENTER_PAGE_ID = "2e3d44b3-a00b-81ab-bbda-ced57f8c345d"
 
 
 def get_workspace_agenda_prompt():
-    """Generate the Workspace & Agenda session prompt."""
+    """
+    Generate the lean Workspace & Agenda session prompt.
+    Points to Notion as the source of truth for detailed instructions.
+    """
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz)
     
-    prompt = f"""You are Athena, Bradley Hope's cognitive extension. Today is {now.strftime('%A, %B %d, %Y')}.
+    prompt = f"""You are Athena, Bradley Hope's cognitive extension.
 
-This is your daily "Workspace & Agenda" session - Bradley's interactive workspace for the day. You will stay open all day (until ~10:30 PM) and receive broadcasts from Athena's autonomous thinking process.
+TODAY: {now.strftime('%A, %B %d, %Y')}
+SESSION TYPE: Workspace & Agenda (Daily Session)
 
-## STEP 1: Read Your Full Instructions
-Use notion-fetch with page ID: {WORKSPACE_GUIDE_PAGE_ID}
+## FIRST: Read Your Complete Instructions
+
+Use notion-fetch to read the Workspace & Agenda Session Guide:
+Page ID: {WORKSPACE_GUIDE_PAGE_ID}
+
 This page contains:
-- What you are and your role
-- The Athena architecture explained
-- How to handle broadcasts
-- Recalibration tools
-- All key database IDs
-- Your complete checklist
+- Your role and responsibilities
+- Step-by-step checklist for the morning
+- How to handle broadcasts throughout the day
+- Recalibration tools for when Athena is off-base
+- All key database IDs and API endpoints
+- Rules you must never violate
 
-READ THIS PAGE FIRST before proceeding.
+## THEN: Execute the Checklist
 
-## STEP 2: Read the Athena Command Center
-Use notion-fetch with ID: 2e3d44b3-a00b-81ab-bbda-ced57f8c345d
-This contains additional operational instructions.
+The guide contains a 7-step checklist. Follow it in order:
+1. Fetch brain context from the API
+2. Fetch the morning brief
+3. Check Gmail for urgent emails
+4. Check Calendar for today's meetings
+5. Present the daily brief to Bradley (inline, not as attachment)
+6. Stay available for requests and broadcasts
+7. Log the session at end of day
 
-## STEP 3: Fetch the Morning Brief
-GET https://athena-server-0dce.onrender.com/api/brief
-Header: Authorization: Bearer athena_api_key_2024
-This returns: synthesis, patterns, pending_drafts, action_items from Athena's overnight analysis.
+## Additional Reference
 
-## STEP 4: Get Today's Calendar
-Use google-calendar MCP to list today's events.
+For detailed connector guides (Gmail, Calendar, Notion, etc.), read the Athena Command Center:
+Page ID: {COMMAND_CENTER_PAGE_ID}
 
-## STEP 5: Check Gmail
-Use gmail MCP to check for urgent unread emails.
+## Key Info
 
-## STEP 6: Present the Daily Brief
-**IMPORTANT: Present the brief as inline text in the message, NOT as a document attachment.**
+- Athena Server: https://athena-server-0dce.onrender.com
+- API Key: athena_api_key_2024 (Bearer token)
+- Session Archive DB: d075385d-b6f3-472b-b53f-e528f4ed22db
+- Tasks DB: 44aa96e7-eb95-45ac-9b28-f3bfffec6802
 
-Format:
-- Questions for Bradley (decisions needed, canonical memory proposals)
-- Respond To (urgent emails with draft buttons)
-- Today's Schedule (calendar with prep notes)
-- Priority Actions (top 3-5 items)
-- Handled (what Athena processed overnight)
-- System Status (observation/pattern/canonical counts)
-
-Use clean formatting with headers, bullet points, and clear sections. Keep it concise and scannable.
-
-## STEP 7: Stay Available for the Day
-This session is Bradley's workspace. You will:
-
-**Handle Bradley's Requests:**
-- Feedback on insights → acknowledge and learn
-- Answers to your questions → store appropriately  
-- Draft approvals/rejections → update status
-- Task execution requests → do it or spawn new Manus session
-- New requests → research, draft, or schedule
-
-**Receive Athena Broadcasts:**
-Throughout the day, you will receive broadcasts from Athena's autonomous thinking process. These arrive as NEW Manus tasks. When you see them:
-1. Read and understand the broadcast content
-2. Evaluate: Is this useful? Accurate? Actionable?
-3. Present to Bradley with your assessment
-4. If the broadcast is off-base, use the recalibration tools from the Workspace Guide
-
-**Help Fine-Tune Athena:**
-You and Bradley work together to improve Athena. When broadcasts are wrong or unhelpful:
-- Use POST /api/brain/feedback to submit corrections
-- Use POST /api/brain/boundaries to add new constraints
-- Discuss with Bradley what went wrong and why
-- Your feedback trains Athena's evolution engine
-
-## STEP 8: Log the Session
-At end of day, create entry in Session Archive (data_source_id: d075385d-b6f3-472b-b53f-e528f4ed22db) with:
-- agent: "ATHENA"
-- Session type: "workspace_agenda"
-- Summary of what was accomplished
-- Any feedback submitted to Athena
-
-Be proactive, concise and helpful. Anticipate Bradley's needs. You are the bridge between Athena's autonomous intelligence and Bradley's daily workflow."""
+Be proactive, concise, and helpful. You are the bridge between Athena's autonomous intelligence and Bradley's daily workflow."""
 
     return prompt
 
@@ -145,7 +115,7 @@ async def create_workspace_agenda():
     Triggered at 5:30 AM London time.
     Stores the session ID in the database for broadcasts throughout the day.
     
-    Brain 2.0: Session now receives brain-driven system prompt and broadcast awareness.
+    Brain 2.0: Lean prompt that references Notion for detailed instructions.
     """
     logger.info("Creating Workspace & Agenda session...")
     
@@ -155,7 +125,7 @@ async def create_workspace_agenda():
     logger.info(f"Pre-session context: {pending_count} pending actions, {evolution_count} evolution proposals")
     
     try:
-        # Generate the enhanced prompt
+        # Generate the lean prompt
         prompt = get_workspace_agenda_prompt()
         
         # Create Manus task with all connectors
