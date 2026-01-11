@@ -94,13 +94,17 @@ async def create_manus_task(
         "Content-Type": "application/json"
     }
     
+    logger.info(f"Creating Manus task: model={model}, connectors_count={len(connectors)}, prompt_length={len(full_prompt)}")
+    
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 f"{settings.MANUS_API_BASE}/tasks",
                 json=payload,
                 headers=headers
             )
+            
+            logger.info(f"Manus API response: status={response.status_code}")
             
             if response.status_code == 200 or response.status_code == 201:
                 result = response.json()
@@ -113,6 +117,9 @@ async def create_manus_task(
                 logger.error(f"Manus API error: {response.status_code} - {response.text}")
                 return None
                 
+    except httpx.TimeoutException as e:
+        logger.error(f"Manus API timeout: {e}")
+        return None
     except Exception as e:
         logger.error(f"Failed to create Manus task: {e}")
         return None
