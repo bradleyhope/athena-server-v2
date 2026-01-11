@@ -243,8 +243,9 @@ Auth: Bearer athena_api_key_2024
 - Focus on analysis and preparation
 """
     
-    # Determine connectors
-    connectors = MANUS_CONNECTORS if use_mcp_fallback else ["notion"]
+    # Determine connectors - use UUIDs, not names
+    # Notion UUID: 9c27c684-2f4f-4d33-8fcf-51664ea15c00
+    connectors = MANUS_CONNECTORS if use_mcp_fallback else ["9c27c684-2f4f-4d33-8fcf-51664ea15c00"]
     
     result = await create_manus_task(
         task_prompt=task_prompt,
