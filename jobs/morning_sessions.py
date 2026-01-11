@@ -153,10 +153,15 @@ async def create_workspace_agenda():
         prompt = get_workspace_agenda_prompt()
         
         # Create Manus task with all connectors
+        logger.info(f"Calling create_manus_task with prompt length: {len(prompt)}")
+        logger.info(f"Connectors: {MANUS_CONNECTORS}")
+        
         result = await create_manus_task(
             prompt=prompt,
             connectors=MANUS_CONNECTORS
         )
+        
+        logger.info(f"create_manus_task returned: {result}")
         
         if result and result.get('id'):
             task_id = result.get('id')
