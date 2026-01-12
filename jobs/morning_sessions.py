@@ -11,14 +11,9 @@ import pytz
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from integrations.manus_api import create_manus_task, rename_manus_task
-from db.neon import set_active_session, get_active_session
-from db.brain import (
-    get_core_identity,
-    get_boundaries,
-    get_pending_actions
-)
-from config import settings, MANUS_CONNECTORS
+from sessions import SessionType, create_managed_session
+from db.brain import get_pending_actions
+from config import settings
 
 logger = logging.getLogger("athena.jobs.morning")
 
@@ -170,82 +165,24 @@ async def run_morning_sessions(force: bool = False):
     """
     logger.info("Starting morning sessions job")
 
-    # Generate session name: "MONTH DD - Daily Agenda and Workspace Instructions"
-    london_tz = pytz.timezone('Europe/London')
-    now = datetime.now(london_tz)
-    today = now.date()
-    session_name = f"{now.strftime('%B').upper()} {now.day} - Daily Agenda and Workspace Instructions"
+    # Get the prompt
+    prompt = get_workspace_agenda_prompt()
 
-    # IDEMPOTENCY CHECK: Don't create duplicate sessions for today
-    if not force:
-        existing = get_active_session('workspace_agenda')
-        if existing and existing.get('session_date') == today:
-            logger.info(f"Session already exists for today: {existing.get('manus_task_id')}")
-            return {
-                "status": "already_exists",
-                "task_id": existing.get('manus_task_id'),
-                "task_url": existing.get('manus_task_url'),
-                "session_name": session_name,
-                "message": "Session already exists for today. Use force=True to create a new one."
-            }
+    # Use centralized session manager - handles idempotency, naming, etc.
+    result = await create_managed_session(
+        session_type=SessionType.WORKSPACE_AGENDA,
+        prompt=prompt,
+        force=force
+    )
 
-    try:
-        # Get the prompt
-        prompt = get_workspace_agenda_prompt()
-        
-        # Create the Manus task
-        logger.info("Creating Workspace & Agenda session...")
-        result = await create_manus_task(
-            prompt=prompt,
-            connectors=MANUS_CONNECTORS
-        )
-        
-        if result and result.get('id'):
-            task_id = result['id']
-            task_url = f"https://manus.im/app/{task_id}"
-            logger.info(f"Created Workspace & Agenda session: {task_id}")
-            
-            # Rename the task with the proper naming convention
-            await rename_manus_task(task_id, session_name)
-            logger.info(f"Renamed session to: {session_name}")
-            
-            # Save to active sessions
-            try:
-                set_active_session(
-                    session_type='workspace_agenda',
-                    manus_task_id=task_id,
-                    manus_task_url=task_url
-                )
-                logger.info(f"Saved active session: {task_id}")
-            except Exception as e:
-                logger.error(f"Failed to save active session: {e}")
-            
-            # Get brain context for response
-            pending = get_pending_actions()
-            
-            return {
-                "status": "success",
-                "task_id": task_id,
-                "task_url": task_url,
-                "session_name": session_name,
-                "brain_context": {
-                    "pending_actions": len(pending) if pending else 0,
-                    "evolution_proposals": 1  # Placeholder
-                }
-            }
-        else:
-            logger.error("Failed to create Workspace & Agenda session")
-            return {
-                "status": "error",
-                "error": "Failed to create Manus task"
-            }
-            
-    except Exception as e:
-        logger.error(f"Error in morning sessions: {e}")
-        return {
-            "status": "error", 
-            "error": str(e)
+    # Add brain context to response
+    if result.get("status") == "success":
+        pending = get_pending_actions()
+        result["brain_context"] = {
+            "pending_actions": len(pending) if pending else 0
         }
+
+    return result
 
 
 # Alias for the scheduler

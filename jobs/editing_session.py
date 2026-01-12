@@ -13,8 +13,7 @@ import pytz
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from integrations.manus_api import create_manus_task, rename_manus_task
-from db.neon import set_active_session, get_active_session
+from sessions import SessionType, create_managed_session
 from db.brain import (
     get_core_identity,
     get_boundaries,
@@ -22,7 +21,7 @@ from db.brain import (
     get_evolution_proposals,
     get_brain_status
 )
-from config import settings, MANUS_CONNECTORS
+from config import settings
 
 logger = logging.getLogger("athena.jobs.editing")
 
@@ -226,70 +225,17 @@ async def run_editing_session(force: bool = False) -> Dict[str, Any]:
     """
     logger.info("Starting editing session")
 
-    london_tz = pytz.timezone('Europe/London')
-    now = datetime.now(london_tz)
-    today = now.date()
-    session_name = f"Athena Editing Session - {now.strftime('%B %d, %Y')}"
+    # Get the prompt
+    prompt = get_editing_session_prompt()
 
-    # IDEMPOTENCY CHECK
-    if not force:
-        existing = get_active_session('editing_session')
-        if existing and existing.get('session_date') == today:
-            logger.info(f"Editing session already exists for today: {existing.get('manus_task_id')}")
-            return {
-                "status": "already_exists",
-                "task_id": existing.get('manus_task_id'),
-                "task_url": existing.get('manus_task_url'),
-                "session_name": session_name,
-                "message": "Session already exists for today. Use force=True to create a new one."
-            }
+    # Use centralized session manager - handles idempotency, naming, etc.
+    result = await create_managed_session(
+        session_type=SessionType.EDITING_SESSION,
+        prompt=prompt,
+        force=force
+    )
 
-    try:
-        prompt = get_editing_session_prompt()
-
-        # Create the Manus task
-        logger.info("Creating editing session...")
-        result = await create_manus_task(
-            prompt=prompt,
-            connectors=MANUS_CONNECTORS
-        )
-
-        if result and result.get('id'):
-            task_id = result['id']
-            task_url = f"https://manus.im/app/{task_id}"
-            logger.info(f"Created editing session: {task_id}")
-
-            # Rename the task
-            await rename_manus_task(task_id, session_name)
-            logger.info(f"Renamed session to: {session_name}")
-
-            # Save to active sessions
-            set_active_session(
-                session_type='editing_session',
-                manus_task_id=task_id,
-                manus_task_url=task_url
-            )
-            logger.info(f"Saved active session: {task_id}")
-
-            return {
-                "status": "success",
-                "task_id": task_id,
-                "task_url": task_url,
-                "session_name": session_name
-            }
-        else:
-            logger.error("Failed to create editing session")
-            return {
-                "status": "error",
-                "error": "Failed to create Manus task"
-            }
-
-    except Exception as e:
-        logger.error(f"Error in editing session: {e}")
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+    return result
 
 
 # For direct testing
