@@ -399,3 +399,167 @@ def get_todays_thinking_session() -> Optional[dict]:
             AND session_date = CURRENT_DATE
         """)
         return cursor.fetchone()
+
+
+# =============================================================================
+# BROADCASTS - Hourly thought broadcasts stored for ATHENA THINKING to fetch
+# =============================================================================
+
+def ensure_broadcasts_table():
+    """Create the broadcasts table if it doesn't exist."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS broadcasts (
+                id SERIAL PRIMARY KEY,
+                session_id VARCHAR(100) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                broadcast_type VARCHAR(50) DEFAULT 'Thought',
+                priority VARCHAR(20) DEFAULT 'Medium',
+                confidence FLOAT DEFAULT 0.8,
+                notion_synced BOOLEAN DEFAULT FALSE,
+                read_by_thinking BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # Create index for efficient queries
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_broadcasts_created_at ON broadcasts(created_at DESC)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_broadcasts_read ON broadcasts(read_by_thinking)
+        """)
+        logger.info("broadcasts table ensured")
+
+
+def store_broadcast(broadcast: dict) -> int:
+    """
+    Store a new broadcast and return its ID.
+    
+    Args:
+        broadcast: Dict with title, content, type, priority, confidence, session_id
+        
+    Returns:
+        Broadcast ID
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO broadcasts (
+                session_id, title, content, broadcast_type, priority, confidence, notion_synced
+            ) VALUES (
+                %(session_id)s, %(title)s, %(content)s, %(type)s, %(priority)s, %(confidence)s, %(notion_synced)s
+            )
+            RETURNING id
+        """, {
+            'session_id': broadcast.get('session_id', ''),
+            'title': broadcast.get('title', ''),
+            'content': broadcast.get('content', ''),
+            'type': broadcast.get('type', 'Thought'),
+            'priority': broadcast.get('priority', 'Medium'),
+            'confidence': broadcast.get('confidence', 0.8),
+            'notion_synced': broadcast.get('notion_synced', False)
+        })
+        return cursor.fetchone()['id']
+
+
+def get_unread_broadcasts(limit: int = 10) -> list:
+    """
+    Get broadcasts that haven't been read by ATHENA THINKING yet.
+    
+    Args:
+        limit: Maximum number of broadcasts to return
+        
+    Returns:
+        List of unread broadcast dicts
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT id, session_id, title, content, broadcast_type, priority, confidence, created_at
+            FROM broadcasts
+            WHERE read_by_thinking = FALSE
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (limit,))
+        return cursor.fetchall()
+
+
+def get_recent_broadcasts(hours: int = 24, limit: int = 20) -> list:
+    """
+    Get recent broadcasts within the specified time window.
+    
+    Args:
+        hours: Number of hours to look back
+        limit: Maximum number of broadcasts to return
+        
+    Returns:
+        List of broadcast dicts
+    """
+    with db_cursor() as cursor:
+        cursor.execute("""
+            SELECT id, session_id, title, content, broadcast_type, priority, confidence, 
+                   read_by_thinking, notion_synced, created_at
+            FROM broadcasts
+            WHERE created_at > NOW() - INTERVAL '%s hours'
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (hours, limit))
+        return cursor.fetchall()
+
+
+def mark_broadcasts_read(broadcast_ids: list) -> int:
+    """
+    Mark broadcasts as read by ATHENA THINKING.
+    
+    Args:
+        broadcast_ids: List of broadcast IDs to mark as read
+        
+    Returns:
+        Number of broadcasts marked
+    """
+    if not broadcast_ids:
+        return 0
+    
+    with db_cursor() as cursor:
+        cursor.execute("""
+            UPDATE broadcasts
+            SET read_by_thinking = TRUE
+            WHERE id = ANY(%s)
+        """, (broadcast_ids,))
+        return len(broadcast_ids)
+
+
+def get_broadcast_stats() -> dict:
+    """
+    Get broadcast statistics for the current day.
+    
+    Returns:
+        Dict with total, unread, and by_type counts
+    """
+    with db_cursor() as cursor:
+        # Total today
+        cursor.execute("""
+            SELECT COUNT(*) as total FROM broadcasts
+            WHERE DATE(created_at) = CURRENT_DATE
+        """)
+        total = cursor.fetchone()['total']
+        
+        # Unread
+        cursor.execute("""
+            SELECT COUNT(*) as unread FROM broadcasts
+            WHERE read_by_thinking = FALSE
+        """)
+        unread = cursor.fetchone()['unread']
+        
+        # By type today
+        cursor.execute("""
+            SELECT broadcast_type, COUNT(*) as count FROM broadcasts
+            WHERE DATE(created_at) = CURRENT_DATE
+            GROUP BY broadcast_type
+        """)
+        by_type = {row['broadcast_type']: row['count'] for row in cursor.fetchall()}
+        
+        return {
+            'total_today': total,
+            'unread': unread,
+            'by_type': by_type
+        }

@@ -17,7 +17,7 @@ from typing import Dict, Any, Optional, List
 import pytz
 
 from config import settings, MANUS_CONNECTORS
-from db.neon import db_cursor, get_active_session
+from db.neon import db_cursor, get_active_session, store_broadcast, ensure_broadcasts_table
 from db.brain import (
     get_brain_status, get_continuous_state_context,
     get_recent_observations, get_recent_patterns
@@ -299,12 +299,25 @@ async def run_hourly_broadcast():
     # Always send to Notion (for record keeping)
     results["notion_sent"] = await send_to_notion(thought)
     
-    # Only spawn Manus task during active hours
-    if is_active_hours():
-        logger.info("Within active hours - spawning Manus broadcast task")
-        results["manus_task_id"] = await spawn_broadcast_task(thought)
-    else:
-        logger.info("Outside active hours - skipping Manus broadcast (stored in Notion only)")
+    # Also store in database for ATHENA THINKING to fetch
+    try:
+        thought['notion_synced'] = results['notion_sent']
+        broadcast_id = store_broadcast(thought)
+        results['broadcast_id'] = broadcast_id
+        logger.info(f"Stored broadcast in database: ID={broadcast_id}")
+    except Exception as e:
+        logger.error(f"Failed to store broadcast in database: {e}")
+        results['broadcast_id'] = None
     
-    logger.info(f"Hourly broadcast complete: Manus={results['manus_task_id']}, Notion={results['notion_sent']}, ActiveHours={results['is_active_hours']}")
+    # NOTE: Manus task spawning disabled - broadcasts are now logged to Notion only
+    # and included in the morning brief. Only 2 Manus sessions per day:
+    # 1. ATHENA THINKING (5:30 AM)
+    # 2. Workspace & Agenda (5:35 AM)
+    #
+    # To re-enable Manus broadcasts, uncomment below:
+    # if is_active_hours():
+    #     logger.info("Within active hours - spawning Manus broadcast task")
+    #     results["manus_task_id"] = await spawn_broadcast_task(thought)
+    
+    logger.info(f"Hourly broadcast complete: Notion={results['notion_sent']}, ActiveHours={results['is_active_hours']} (Manus spawning disabled)")
     return results

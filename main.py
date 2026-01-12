@@ -189,23 +189,9 @@ def setup_scheduled_jobs():
         replace_existing=True
     )
     
-    # Morning Synthesis - 5:40 AM London (strategic analysis of overnight activity)
-    scheduler.add_job(
-        run_synthesis_broadcast,
-        CronTrigger(hour=5, minute=40),
-        id="morning_synthesis",
-        name="Morning Synthesis Broadcast",
-        replace_existing=True
-    )
+    # NOTE: Synthesis is now included in the morning brief, not a separate Manus session
+    # The synthesis data is fetched via /api/brief endpoint and presented in Workspace & Agenda
     
-    # Evening Synthesis - 5:30 PM London (strategic analysis of day's activity)
-    scheduler.add_job(
-        run_synthesis_broadcast,
-        CronTrigger(hour=17, minute=30),
-        id="evening_synthesis",
-        name="Evening Synthesis Broadcast",
-        replace_existing=True
-    )
     
     # Overnight learning - every hour from midnight to 5am
     scheduler.add_job(

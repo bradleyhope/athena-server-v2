@@ -689,3 +689,69 @@ async def get_recent_broadcasts():
     except Exception as e:
         logger.error(f"Error fetching broadcasts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# =============================================================================
+# DATABASE BROADCASTS - For ATHENA THINKING to fetch hourly broadcasts
+# =============================================================================
+
+@router.get("/broadcasts/unread")
+async def get_unread_broadcasts():
+    """
+    Get broadcasts that haven't been read by ATHENA THINKING yet.
+    This is the primary endpoint for the THINKING session to check for new broadcasts.
+    """
+    from db.neon import get_unread_broadcasts, mark_broadcasts_read
+    
+    try:
+        broadcasts = get_unread_broadcasts(limit=20)
+        
+        # Mark them as read
+        if broadcasts:
+            broadcast_ids = [b['id'] for b in broadcasts]
+            mark_broadcasts_read(broadcast_ids)
+        
+        return {
+            "count": len(broadcasts),
+            "broadcasts": broadcasts,
+            "marked_as_read": len(broadcasts)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get unread broadcasts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/broadcasts/recent")
+async def get_recent_db_broadcasts(hours: int = 24, limit: int = 20):
+    """
+    Get recent broadcasts from the database within a time window.
+    Useful for reviewing broadcast history.
+    """
+    from db.neon import get_recent_broadcasts
+    
+    try:
+        broadcasts = get_recent_broadcasts(hours=hours, limit=limit)
+        return {
+            "count": len(broadcasts),
+            "hours": hours,
+            "broadcasts": broadcasts
+        }
+    except Exception as e:
+        logger.error(f"Failed to get recent broadcasts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/broadcasts/stats")
+async def get_broadcast_stats():
+    """
+    Get broadcast statistics for monitoring.
+    """
+    from db.neon import get_broadcast_stats
+    
+    try:
+        stats = get_broadcast_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get broadcast stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
