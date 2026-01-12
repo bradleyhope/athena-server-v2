@@ -428,13 +428,14 @@ async def quick_learn(
         # Store in canonical memory
         with db_cursor() as cursor:
             cursor.execute("""
-                INSERT INTO canonical_memory (category, key, content, source, confidence)
-                VALUES (%s, %s, %s, %s, 0.9)
+                INSERT INTO canonical_memory (category, key, value, content, source, confidence)
+                VALUES (%s, %s, %s, %s, %s, 0.9)
                 RETURNING id
             """, (
                 classification.get("category", "facts"),
                 f"quick_learn_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-                statement,
+                statement,  # value column (required)
+                statement,  # content column (for display)
                 source
             ))
             result["stored"] = True
