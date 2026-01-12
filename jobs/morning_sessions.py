@@ -18,15 +18,9 @@ from db.brain import (
     get_boundaries,
     get_pending_actions
 )
-from config import MANUS_CONNECTORS
+from config import settings, MANUS_CONNECTORS
 
 logger = logging.getLogger("athena.jobs.morning")
-
-# Reference pages in Notion
-COMMAND_CENTER_PAGE_ID = "2e3d44b3-a00b-81ab-bbda-ced57f8c345d"
-WORKSPACE_GUIDE_PAGE_ID = "2e5d44b3-a00b-813f-83fa-f3f3859d3ce8"
-SESSION_ARCHIVE_DB_ID = "d075385d-b6f3-472b-b53f-e528f4ed22db"
-ATHENA_TASKS_DB_ID = "44aa96e7-eb95-45ac-9b28-f3bfffec6802"
 
 
 def get_workspace_agenda_prompt():
@@ -48,7 +42,7 @@ This task is to prepare and present Bradley Hope's daily brief, then remain avai
 ## SETUP STEPS
 
 ### Step 1: Read the Athena Command Center
-Fetch the Notion page with ID: `{COMMAND_CENTER_PAGE_ID}`
+Fetch the Notion page with ID: `{settings.ATHENA_COMMAND_CENTER_ID}`
 This contains the full operating instructions and context for this session.
 
 ### Step 2: Fetch Active Rules (IMPORTANT)
@@ -66,7 +60,7 @@ This returns boundaries, preferences, and canonical memory that MUST be applied 
 - Schedule admin tasks for Tuesdays/Wednesdays before 3 PM
 
 ### Step 3: Query the Athena Tasks Database
-Query the Notion database with data_source_id: `{ATHENA_TASKS_DB_ID}`
+Query the Notion database with data_source_id: `{settings.ATHENA_TASKS_DB_ID}`
 Look for:
 - Tasks completed recently (especially today) - celebrate these wins!
 - Tasks due today or overdue
@@ -148,7 +142,7 @@ Body: {{"feedback_type": "correction", "original_content": "...", "correction": 
 ## END OF DAY
 
 1. Log the session summary to the Session Archive:
-   - Database: `{SESSION_ARCHIVE_DB_ID}`
+   - Database: `{settings.SESSION_ARCHIVE_DB_ID}`
    - Include: tasks completed, decisions made, items deferred
 
 2. Submit any learnings from the session using the learning endpoint above
