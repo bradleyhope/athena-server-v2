@@ -15,19 +15,9 @@ from googleapiclient.discovery import build
 
 from config import settings
 from db.neon import store_observation, db_cursor
+from integrations.google_auth import get_google_credentials
 
 logger = logging.getLogger("athena.jobs.observation")
-
-
-def get_google_credentials() -> Credentials:
-    """Get Google OAuth credentials."""
-    return Credentials(
-        token=None,
-        refresh_token=settings.GOOGLE_REFRESH_TOKEN,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=settings.GOOGLE_CLIENT_ID,
-        client_secret=settings.GOOGLE_CLIENT_SECRET,
-    )
 
 
 def classify_email(client: OpenAI, email: dict) -> dict:

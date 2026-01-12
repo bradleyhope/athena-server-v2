@@ -592,35 +592,6 @@ async def mark_feedback_as_processed(feedback_id: str, evolution_id: Optional[st
 
 
 # =============================================================================
-# ALIAS ENDPOINTS (for convenience)
-# =============================================================================
-
-@router.get("/pending-actions")
-async def list_pending_actions_alias(
-    status: str = "pending",
-    priority: Optional[str] = None
-):
-    """Alias for /actions/pending - Get pending actions."""
-    try:
-        actions = get_pending_actions(status, priority)
-        return {"count": len(actions), "actions": actions}
-    except Exception as e:
-        logger.error(f"Failed to get pending actions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/evolution")
-async def list_evolution_proposals_alias(status: str = "proposed"):
-    """Alias for /evolution/proposals - Get evolution proposals."""
-    try:
-        proposals = get_evolution_proposals(status)
-        return {"count": len(proposals), "proposals": proposals}
-    except Exception as e:
-        logger.error(f"Failed to get evolution proposals: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# =============================================================================
 # STATUS ENDPOINTS
 # =============================================================================
 

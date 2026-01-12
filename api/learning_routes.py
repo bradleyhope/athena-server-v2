@@ -15,22 +15,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from db.neon import db_cursor
-# Auth dependency defined locally to avoid circular imports
-from fastapi import Header
-
-async def verify_api_key(authorization: str = Header(None)):
-    """Verify API key for protected endpoints."""
-    from config import settings
-    if not settings.ATHENA_API_KEY:
-        return True
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid Authorization format")
-    token = authorization.replace("Bearer ", "")
-    if token != settings.ATHENA_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    return True
+from api.auth import verify_api_key
 
 logger = logging.getLogger("athena.api.learning")
 router = APIRouter(prefix="/api/v1/learning", tags=["learning"])

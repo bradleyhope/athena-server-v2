@@ -14,6 +14,7 @@ from googleapiclient.discovery import build
 
 from config import settings
 from db.neon import store_observation, db_cursor
+from integrations.google_auth import get_google_credentials
 
 logger = logging.getLogger("athena.jobs.overnight")
 
@@ -22,7 +23,7 @@ def get_learning_progress() -> Dict:
     """Get current overnight learning progress."""
     with db_cursor() as cursor:
         cursor.execute("""
-            SELECT source, MAX(last_processed_id) as last_id, 
+            SELECT source, MAX(last_processed_id) as last_id,
                    MAX(last_processed_date) as last_date,
                    SUM(items_processed) as total_processed
             FROM deep_learning_progress
@@ -39,17 +40,6 @@ def update_learning_progress(source: str, last_id: str, items_processed: int):
             INSERT INTO deep_learning_progress (source, last_processed_id, last_processed_date, items_processed)
             VALUES (%s, %s, %s, %s)
         """, (source, last_id, datetime.utcnow(), items_processed))
-
-
-def get_google_credentials() -> Credentials:
-    """Get Google OAuth credentials."""
-    return Credentials(
-        token=None,
-        refresh_token=settings.GOOGLE_REFRESH_TOKEN,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=settings.GOOGLE_CLIENT_ID,
-        client_secret=settings.GOOGLE_CLIENT_SECRET,
-    )
 
 
 def read_historical_emails(client: Anthropic, batch_size: int = 20) -> int:
