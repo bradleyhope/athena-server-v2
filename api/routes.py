@@ -490,6 +490,64 @@ async def run_broadcasts_migration():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/migrations/broadcast-idempotency")
+async def run_broadcast_idempotency_migration():
+    """Add unique constraint on broadcasts.session_id for idempotency."""
+    from db.neon import db_cursor
+    
+    try:
+        with db_cursor() as cursor:
+            # Check if constraint already exists
+            cursor.execute("""
+                SELECT 1 FROM information_schema.table_constraints
+                WHERE constraint_name = 'unique_broadcast_session'
+                AND table_name = 'broadcasts'
+            """)
+            if cursor.fetchone():
+                return {"status": "ok", "message": "Constraint already exists"}
+        
+        # Clean up duplicates first
+        with db_cursor() as cursor:
+            cursor.execute("""
+                SELECT session_id, COUNT(*) as count
+                FROM broadcasts
+                GROUP BY session_id
+                HAVING COUNT(*) > 1
+            """)
+            duplicates = cursor.fetchall()
+            
+            cleaned = 0
+            for dup in duplicates:
+                session_id = dup['session_id']
+                cursor.execute("""
+                    DELETE FROM broadcasts
+                    WHERE session_id = %s
+                    AND id NOT IN (
+                        SELECT id FROM broadcasts
+                        WHERE session_id = %s
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    )
+                """, (session_id, session_id))
+                cleaned += cursor.rowcount
+        
+        # Add the constraint
+        with db_cursor() as cursor:
+            cursor.execute("""
+                ALTER TABLE broadcasts
+                ADD CONSTRAINT unique_broadcast_session UNIQUE (session_id)
+            """)
+        
+        return {
+            "status": "ok",
+            "message": "Unique constraint added",
+            "duplicates_cleaned": cleaned
+        }
+    except Exception as e:
+        logger.error(f"Migration failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/migrations/add-indexes")
 async def run_indexes_migration():
     """Add performance indexes to the database (each index in separate transaction)."""
