@@ -464,65 +464,59 @@ async def run_broadcasts_migration():
 
 @router.post("/migrations/add-indexes")
 async def run_indexes_migration():
-    """Add performance indexes to the database."""
+    """Add performance indexes to the database (each index in separate transaction)."""
     from db.neon import db_cursor
     
-    INDEXES_SQL = """
-    CREATE INDEX IF NOT EXISTS idx_session_state_type ON session_state(session_type);
-    CREATE INDEX IF NOT EXISTS idx_session_state_date ON session_state(session_date);
-    CREATE INDEX IF NOT EXISTS idx_synthesis_memory_type ON synthesis_memory(synthesis_type);
-    CREATE INDEX IF NOT EXISTS idx_synthesis_memory_created ON synthesis_memory(created_at);
-    CREATE INDEX IF NOT EXISTS idx_synthesis_memory_date ON synthesis_memory(synthesis_date);
-    CREATE INDEX IF NOT EXISTS idx_observations_category ON observations(category);
-    CREATE INDEX IF NOT EXISTS idx_observations_created ON observations(created_at);
-    CREATE INDEX IF NOT EXISTS idx_observations_source ON observations(source);
-    CREATE INDEX IF NOT EXISTS idx_patterns_type ON patterns(pattern_type);
-    CREATE INDEX IF NOT EXISTS idx_patterns_detected ON patterns(detected_at);
-    CREATE INDEX IF NOT EXISTS idx_patterns_confidence ON patterns(confidence);
-    CREATE INDEX IF NOT EXISTS idx_context_windows_expires ON context_windows(expires_at);
-    CREATE INDEX IF NOT EXISTS idx_context_windows_priority ON context_windows(priority);
-    CREATE INDEX IF NOT EXISTS idx_entities_confidence ON entities(confidence);
-    CREATE INDEX IF NOT EXISTS idx_entities_source ON entities(source);
-    CREATE INDEX IF NOT EXISTS idx_entities_created ON entities(created_at);
-    CREATE INDEX IF NOT EXISTS idx_entity_rel_strength ON entity_relationships(strength);
-    CREATE INDEX IF NOT EXISTS idx_entity_notes_valid_until ON entity_notes(valid_until);
-    CREATE INDEX IF NOT EXISTS idx_entity_notes_created ON entity_notes(created_at);
-    CREATE INDEX IF NOT EXISTS idx_thinking_log_session_phase ON thinking_log(session_id, phase);
-    CREATE INDEX IF NOT EXISTS idx_performance_metrics_name ON performance_metrics(metric_name);
-    CREATE INDEX IF NOT EXISTS idx_evolution_log_confidence ON evolution_log(confidence);
-    CREATE INDEX IF NOT EXISTS idx_evolution_log_category ON evolution_log(category);
-    CREATE INDEX IF NOT EXISTS idx_preferences_category_key ON preferences(category, key);
-    CREATE INDEX IF NOT EXISTS idx_core_identity_key ON core_identity(key);
-    CREATE INDEX IF NOT EXISTS idx_broadcasts_session ON broadcasts(session_id);
-    CREATE INDEX IF NOT EXISTS idx_broadcasts_scheduled ON broadcasts(scheduled_for);
-    CREATE INDEX IF NOT EXISTS idx_broadcasts_status ON broadcasts(status);
-    """
+    # Each index as a separate statement - will run in separate transactions
+    INDEXES = [
+        "CREATE INDEX IF NOT EXISTS idx_session_state_type ON session_state(session_type)",
+        "CREATE INDEX IF NOT EXISTS idx_session_state_date ON session_state(session_date)",
+        "CREATE INDEX IF NOT EXISTS idx_synthesis_memory_type ON synthesis_memory(synthesis_type)",
+        "CREATE INDEX IF NOT EXISTS idx_synthesis_memory_created ON synthesis_memory(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_observations_category ON observations(category)",
+        "CREATE INDEX IF NOT EXISTS idx_observations_collected ON observations(collected_at)",
+        "CREATE INDEX IF NOT EXISTS idx_observations_source ON observations(source_type)",
+        "CREATE INDEX IF NOT EXISTS idx_patterns_type ON patterns(pattern_type)",
+        "CREATE INDEX IF NOT EXISTS idx_patterns_detected ON patterns(detected_at)",
+        "CREATE INDEX IF NOT EXISTS idx_patterns_confidence ON patterns(confidence)",
+        "CREATE INDEX IF NOT EXISTS idx_context_windows_expires ON context_windows(expires_at)",
+        "CREATE INDEX IF NOT EXISTS idx_context_windows_priority ON context_windows(priority)",
+        "CREATE INDEX IF NOT EXISTS idx_entities_confidence ON entities(confidence)",
+        "CREATE INDEX IF NOT EXISTS idx_entities_source ON entities(source)",
+        "CREATE INDEX IF NOT EXISTS idx_entities_created ON entities(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_entity_rel_strength ON entity_relationships(strength)",
+        "CREATE INDEX IF NOT EXISTS idx_entity_notes_valid_until ON entity_notes(valid_until)",
+        "CREATE INDEX IF NOT EXISTS idx_entity_notes_created ON entity_notes(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_thinking_log_session_phase ON thinking_log(session_id, phase)",
+        "CREATE INDEX IF NOT EXISTS idx_performance_metrics_name ON performance_metrics(metric_name)",
+        "CREATE INDEX IF NOT EXISTS idx_evolution_log_confidence ON evolution_log(confidence)",
+        "CREATE INDEX IF NOT EXISTS idx_evolution_log_category ON evolution_log(category)",
+        "CREATE INDEX IF NOT EXISTS idx_preferences_category_key ON preferences(category, key)",
+        "CREATE INDEX IF NOT EXISTS idx_core_identity_key ON core_identity(key)",
+        "CREATE INDEX IF NOT EXISTS idx_broadcasts_session ON broadcasts(session_id)",
+        "CREATE INDEX IF NOT EXISTS idx_broadcasts_scheduled ON broadcasts(scheduled_for)",
+        "CREATE INDEX IF NOT EXISTS idx_broadcasts_status ON broadcasts(status)",
+    ]
     
     created = []
     skipped = []
     
-    try:
-        with db_cursor() as cursor:
-            for statement in INDEXES_SQL.strip().split(';'):
-                statement = statement.strip()
-                if statement:
-                    try:
-                        cursor.execute(statement)
-                        idx_name = statement.split('idx_')[1].split(' ')[0] if 'idx_' in statement else 'unknown'
-                        created.append(f"idx_{idx_name}")
-                    except Exception as e:
-                        idx_name = statement.split('idx_')[1].split(' ')[0] if 'idx_' in statement else 'unknown'
-                        skipped.append({"index": f"idx_{idx_name}", "reason": str(e)})
-        
-        return {
-            "status": "ok",
-            "message": f"Created {len(created)} indexes, skipped {len(skipped)}",
-            "created": created,
-            "skipped": skipped
-        }
-    except Exception as e:
-        logger.error(f"Failed to run indexes migration: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    for statement in INDEXES:
+        idx_name = statement.split('idx_')[1].split(' ')[0] if 'idx_' in statement else 'unknown'
+        try:
+            # Each index in its own transaction
+            with db_cursor() as cursor:
+                cursor.execute(statement)
+            created.append(f"idx_{idx_name}")
+        except Exception as e:
+            skipped.append({"index": f"idx_{idx_name}", "reason": str(e)})
+    
+    return {
+        "status": "ok",
+        "message": f"Created {len(created)} indexes, skipped {len(skipped)}",
+        "created": created,
+        "skipped": skipped
+    }
 
 
 @router.post("/trigger/hourly-broadcast")
