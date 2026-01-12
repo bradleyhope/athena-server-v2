@@ -285,10 +285,13 @@ async def run_editing_session(force: bool = False) -> Dict[str, Any]:
             }
 
     except Exception as e:
+        import traceback
         logger.error(f"Error in editing session: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return {
             "status": "error",
-            "error": str(e)
+            "error": str(e),
+            "traceback": traceback.format_exc()
         }
 
 
