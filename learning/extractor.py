@@ -429,15 +429,16 @@ async def quick_learn(
         import json
         with db_cursor() as cursor:
             cursor.execute("""
-                INSERT INTO canonical_memory (category, key, value, content, source, confidence)
-                VALUES (%s, %s, %s, %s, %s, 0.9)
+                INSERT INTO canonical_memory (category, key, value, content, source, confidence, approved_at, approved_in_session)
+                VALUES (%s, %s, %s, %s, %s, 0.9, NOW(), %s)
                 RETURNING id
             """, (
                 classification.get("category", "facts"),
                 f"quick_learn_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
                 json.dumps(statement),  # value column (required, JSON format)
                 statement,  # content column (for display)
-                source
+                source,
+                source  # approved_in_session
             ))
             result["stored"] = True
             result["storage_location"] = "canonical_memory"
