@@ -268,8 +268,8 @@ async def run_editing_session(force: bool = False) -> Dict[str, Any]:
             # Save to active sessions
             set_active_session(
                 session_type='editing_session',
-                manus_task_id=task_id,
-                manus_task_url=task_url
+                task_id=task_id,
+                task_url=task_url
             )
             logger.info(f"Saved active session: {task_id}")
 
