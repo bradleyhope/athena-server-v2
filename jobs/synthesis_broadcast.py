@@ -113,6 +113,38 @@ async def generate_synthesis() -> Dict[str, Any]:
     synthesis_lines.append(f"*Analyzing {period}'s activity ({now.strftime('%A, %B %d, %Y')})*")
     synthesis_lines.append("")
     
+    # Check if we have any data
+    total_data = len(recent_bursts) + len(recent_observations) + len(recent_patterns)
+    
+    if total_data == 0:
+        synthesis_lines.append("### ⚠️ No Activity Data")
+        synthesis_lines.append("")
+        synthesis_lines.append("The observation and pattern detection jobs haven't collected data yet.")
+        synthesis_lines.append("")
+        synthesis_lines.append("**Possible reasons:**")
+        synthesis_lines.append("- Jobs are scheduled but haven't run yet")
+        synthesis_lines.append("- Gmail/Calendar API credentials need configuration")
+        synthesis_lines.append("- No new emails or calendar events in the monitoring period")
+        synthesis_lines.append("")
+        synthesis_lines.append("**Next steps:**")
+        synthesis_lines.append("1. Check that observation bursts are running (every 30 min)")
+        synthesis_lines.append("2. Verify Google API credentials are configured")
+        synthesis_lines.append("3. Wait for the next scheduled observation burst")
+        synthesis_lines.append("")
+        
+        return {
+            "title": f"📊 {synthesis_type}: No data available",
+            "content": "\n".join(synthesis_lines),
+            "type": "Synthesis",
+            "priority": "Low",
+            "stats": {
+                "bursts": 0,
+                "observations": 0,
+                "patterns": 0,
+                "pending_actions": len(pending_actions)
+            }
+        }
+    
     # Overview
     synthesis_lines.append("### Overview")
     synthesis_lines.append(f"- **Bursts generated:** {len(recent_bursts)}")

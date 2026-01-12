@@ -202,6 +202,108 @@ async def list_drafts():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/drafts/{draft_id}/reject")
+async def reject_draft(draft_id: str, reason: Optional[str] = None):
+    """Reject a pending email draft."""
+    from db.neon import db_cursor
+    
+    try:
+        with db_cursor() as cursor:
+            # Check if draft exists
+            cursor.execute("SELECT id, status FROM email_drafts WHERE id = %s", (draft_id,))
+            draft = cursor.fetchone()
+            
+            if not draft:
+                raise HTTPException(status_code=404, detail="Draft not found")
+            
+            # Update status to rejected
+            cursor.execute("""
+                UPDATE email_drafts 
+                SET status = 'rejected', 
+                    reviewed_at = NOW(),
+                    review_notes = %s
+                WHERE id = %s
+            """, (reason or "Rejected by user", draft_id))
+            
+        return {
+            "success": True,
+            "draft_id": draft_id,
+            "status": "rejected",
+            "reason": reason
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to reject draft {draft_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/drafts/{draft_id}/approve")
+async def approve_draft(draft_id: str):
+    """Approve a pending email draft for sending."""
+    from db.neon import db_cursor
+    
+    try:
+        with db_cursor() as cursor:
+            # Check if draft exists
+            cursor.execute("SELECT id, status FROM email_drafts WHERE id = %s", (draft_id,))
+            draft = cursor.fetchone()
+            
+            if not draft:
+                raise HTTPException(status_code=404, detail="Draft not found")
+            
+            # Update status to approved
+            cursor.execute("""
+                UPDATE email_drafts 
+                SET status = 'approved', 
+                    reviewed_at = NOW()
+                WHERE id = %s
+            """, (draft_id,))
+            
+        return {
+            "success": True,
+            "draft_id": draft_id,
+            "status": "approved"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to approve draft {draft_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/drafts/reject-bulk")
+async def reject_drafts_bulk(draft_ids: list[str], reason: Optional[str] = None):
+    """Reject multiple drafts at once."""
+    from db.neon import db_cursor
+    
+    try:
+        rejected = []
+        with db_cursor() as cursor:
+            for draft_id in draft_ids:
+                cursor.execute("""
+                    UPDATE email_drafts 
+                    SET status = 'rejected', 
+                        reviewed_at = NOW(),
+                        review_notes = %s
+                    WHERE id = %s AND status = 'pending_review'
+                    RETURNING id
+                """, (reason or "Bulk rejected", draft_id))
+                result = cursor.fetchone()
+                if result:
+                    rejected.append(draft_id)
+            
+        return {
+            "success": True,
+            "rejected_count": len(rejected),
+            "rejected_ids": rejected,
+            "reason": reason
+        }
+    except Exception as e:
+        logger.error(f"Failed to bulk reject drafts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/brief")
 async def get_morning_brief():
     """
