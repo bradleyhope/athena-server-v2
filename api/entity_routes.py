@@ -9,7 +9,7 @@ import logging
 from typing import Optional, List
 from datetime import datetime, date
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from db.brain import (
@@ -27,6 +27,7 @@ from db.brain import (
     get_entity_notes,
     get_entity_context,
 )
+from api.errors import handle_api_errors, NotFoundError
 
 logger = logging.getLogger("athena.api.entities")
 
@@ -86,26 +87,24 @@ class NoteCreate(BaseModel):
 # =============================================================================
 
 @router.post("", status_code=201)
+@handle_api_errors("create entity")
 async def create_entity_endpoint(entity: EntityCreate):
     """Create a new entity."""
-    try:
-        entity_id = create_entity(
-            entity_type=entity.entity_type,
-            name=entity.name,
-            description=entity.description,
-            aliases=entity.aliases,
-            metadata=entity.metadata,
-            access_tier=entity.access_tier,
-            source=entity.source,
-            confidence=entity.confidence
-        )
-        return {"id": entity_id, "message": "Entity created successfully"}
-    except Exception as e:
-        logger.error(f"Failed to create entity: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    entity_id = create_entity(
+        entity_type=entity.entity_type,
+        name=entity.name,
+        description=entity.description,
+        aliases=entity.aliases,
+        metadata=entity.metadata,
+        access_tier=entity.access_tier,
+        source=entity.source,
+        confidence=entity.confidence
+    )
+    return {"id": entity_id, "message": "Entity created successfully"}
 
 
 @router.get("")
+@handle_api_errors("list entities")
 async def list_entities(
     query: Optional[str] = Query(None, description="Search query"),
     entity_type: Optional[str] = Query(None, description="Filter by type"),
@@ -113,125 +112,90 @@ async def list_entities(
     limit: int = Query(20, ge=1, le=100)
 ):
     """Search and list entities."""
-    try:
-        entities = search_entities(
-            query=query,
-            entity_type=entity_type,
-            access_tier=access_tier,
-            limit=limit
-        )
-        return {"entities": entities, "count": len(entities)}
-    except Exception as e:
-        logger.error(f"Failed to list entities: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    entities = search_entities(
+        query=query,
+        entity_type=entity_type,
+        access_tier=access_tier,
+        limit=limit
+    )
+    return {"entities": entities, "count": len(entities)}
 
 
 @router.get("/vip")
+@handle_api_errors("get VIP entities")
 async def list_vip_entities():
     """Get all VIP entities."""
-    try:
-        entities = get_vip_entities()
-        return {"entities": entities, "count": len(entities)}
-    except Exception as e:
-        logger.error(f"Failed to get VIP entities: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    entities = get_vip_entities()
+    return {"entities": entities, "count": len(entities)}
 
 
 @router.get("/by-name/{name}")
+@handle_api_errors("get entity by name")
 async def get_entity_by_name_endpoint(
     name: str,
     entity_type: Optional[str] = Query(None)
 ):
     """Get an entity by name (case-insensitive)."""
-    try:
-        entity = get_entity_by_name(name, entity_type)
-        if not entity:
-            raise HTTPException(status_code=404, detail="Entity not found")
-        return entity
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get entity by name: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    entity = get_entity_by_name(name, entity_type)
+    if not entity:
+        raise NotFoundError("Entity not found")
+    return entity
 
 
 @router.get("/type/{entity_type}")
+@handle_api_errors("list entities by type")
 async def list_entities_by_type(entity_type: str):
     """Get all entities of a specific type."""
-    try:
-        entities = get_entities_by_type(entity_type)
-        return {"entities": entities, "count": len(entities)}
-    except Exception as e:
-        logger.error(f"Failed to list entities by type: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    entities = get_entities_by_type(entity_type)
+    return {"entities": entities, "count": len(entities)}
 
 
 @router.get("/{entity_id}")
+@handle_api_errors("get entity")
 async def get_entity_endpoint(entity_id: str):
     """Get an entity by ID."""
-    try:
-        entity = get_entity(entity_id)
-        if not entity:
-            raise HTTPException(status_code=404, detail="Entity not found")
-        return entity
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get entity: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    entity = get_entity(entity_id)
+    if not entity:
+        raise NotFoundError("Entity not found")
+    return entity
 
 
 @router.get("/{entity_id}/context")
+@handle_api_errors("get entity context")
 async def get_entity_context_endpoint(entity_id: str):
     """Get complete context for an entity including relationships and notes."""
-    try:
-        context = get_entity_context(entity_id)
-        if not context:
-            raise HTTPException(status_code=404, detail="Entity not found")
-        return context
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get entity context: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    context = get_entity_context(entity_id)
+    if not context:
+        raise NotFoundError("Entity not found")
+    return context
 
 
 @router.put("/{entity_id}")
+@handle_api_errors("update entity")
 async def update_entity_endpoint(entity_id: str, entity: EntityUpdate):
     """Update an entity."""
-    try:
-        success = update_entity(
-            entity_id=entity_id,
-            name=entity.name,
-            description=entity.description,
-            aliases=entity.aliases,
-            metadata=entity.metadata,
-            access_tier=entity.access_tier,
-            confidence=entity.confidence
-        )
-        if not success:
-            raise HTTPException(status_code=404, detail="Entity not found or no changes")
-        return {"message": "Entity updated successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update entity: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    success = update_entity(
+        entity_id=entity_id,
+        name=entity.name,
+        description=entity.description,
+        aliases=entity.aliases,
+        metadata=entity.metadata,
+        access_tier=entity.access_tier,
+        confidence=entity.confidence
+    )
+    if not success:
+        raise NotFoundError("Entity not found or no changes")
+    return {"message": "Entity updated successfully"}
 
 
 @router.delete("/{entity_id}")
+@handle_api_errors("delete entity")
 async def delete_entity_endpoint(entity_id: str, hard_delete: bool = Query(False)):
     """Delete an entity (soft delete by default)."""
-    try:
-        success = delete_entity(entity_id, soft_delete=not hard_delete)
-        if not success:
-            raise HTTPException(status_code=404, detail="Entity not found")
-        return {"message": "Entity deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete entity: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    success = delete_entity(entity_id, soft_delete=not hard_delete)
+    if not success:
+        raise NotFoundError("Entity not found")
+    return {"message": "Entity deleted successfully"}
 
 
 # =============================================================================
@@ -239,38 +203,32 @@ async def delete_entity_endpoint(entity_id: str, hard_delete: bool = Query(False
 # =============================================================================
 
 @router.post("/relationships", status_code=201)
+@handle_api_errors("create relationship")
 async def create_relationship_endpoint(relationship: RelationshipCreate):
     """Create a relationship between two entities."""
-    try:
-        rel_id = create_relationship(
-            source_entity_id=relationship.source_entity_id,
-            target_entity_id=relationship.target_entity_id,
-            relationship_type=relationship.relationship_type,
-            description=relationship.description,
-            strength=relationship.strength,
-            start_date=relationship.start_date,
-            end_date=relationship.end_date,
-            metadata=relationship.metadata,
-            source=relationship.source
-        )
-        return {"id": rel_id, "message": "Relationship created successfully"}
-    except Exception as e:
-        logger.error(f"Failed to create relationship: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    rel_id = create_relationship(
+        source_entity_id=relationship.source_entity_id,
+        target_entity_id=relationship.target_entity_id,
+        relationship_type=relationship.relationship_type,
+        description=relationship.description,
+        strength=relationship.strength,
+        start_date=relationship.start_date,
+        end_date=relationship.end_date,
+        metadata=relationship.metadata,
+        source=relationship.source
+    )
+    return {"id": rel_id, "message": "Relationship created successfully"}
 
 
 @router.get("/{entity_id}/relationships")
+@handle_api_errors("get relationships")
 async def get_relationships_endpoint(
     entity_id: str,
     direction: str = Query("both", description="'outgoing', 'incoming', or 'both'")
 ):
     """Get all relationships for an entity."""
-    try:
-        relationships = get_entity_relationships(entity_id, direction)
-        return {"relationships": relationships, "count": len(relationships)}
-    except Exception as e:
-        logger.error(f"Failed to get relationships: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    relationships = get_entity_relationships(entity_id, direction)
+    return {"relationships": relationships, "count": len(relationships)}
 
 
 # =============================================================================
@@ -278,33 +236,27 @@ async def get_relationships_endpoint(
 # =============================================================================
 
 @router.post("/{entity_id}/notes", status_code=201)
+@handle_api_errors("add note")
 async def add_note_endpoint(entity_id: str, note: NoteCreate):
     """Add a note to an entity."""
-    try:
-        note_id = add_entity_note(
-            entity_id=entity_id,
-            note_type=note.note_type,
-            content=note.content,
-            importance=note.importance,
-            valid_until=note.valid_until,
-            source=note.source
-        )
-        return {"id": note_id, "message": "Note added successfully"}
-    except Exception as e:
-        logger.error(f"Failed to add note: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    note_id = add_entity_note(
+        entity_id=entity_id,
+        note_type=note.note_type,
+        content=note.content,
+        importance=note.importance,
+        valid_until=note.valid_until,
+        source=note.source
+    )
+    return {"id": note_id, "message": "Note added successfully"}
 
 
 @router.get("/{entity_id}/notes")
+@handle_api_errors("get notes")
 async def get_notes_endpoint(
     entity_id: str,
     note_type: Optional[str] = Query(None),
     include_expired: bool = Query(False)
 ):
     """Get notes for an entity."""
-    try:
-        notes = get_entity_notes(entity_id, note_type, include_expired)
-        return {"notes": notes, "count": len(notes)}
-    except Exception as e:
-        logger.error(f"Failed to get notes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    notes = get_entity_notes(entity_id, note_type, include_expired)
+    return {"notes": notes, "count": len(notes)}
