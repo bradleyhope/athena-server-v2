@@ -554,6 +554,50 @@ async def trigger_editing_session(force: bool = False):
         }
 
 
+@router.post("/trigger/teaching-session")
+async def trigger_teaching_session(force: bool = False):
+    """
+    Trigger an Athena Teaching Session for actively teaching Athena.
+
+    This is a dedicated session where Bradley teaches Athena about:
+    - People and relationships
+    - Projects and their status
+    - Preferences and communication style
+    - Rules and boundaries
+
+    Args:
+        force: If True, create new session even if one exists today.
+    """
+    from jobs.teaching_session import run_teaching_session
+
+    try:
+        result = await run_teaching_session(force=force)
+
+        if result.get("status") == "already_exists":
+            return {
+                "message": "Teaching session already exists for today",
+                "status": "already_exists",
+                "task_id": result.get("task_id"),
+                "task_url": result.get("task_url"),
+                "hint": "Use force=true to create a new session"
+            }
+
+        return {
+            "message": "Teaching session created",
+            "status": result.get("status"),
+            "task_id": result.get("task_id"),
+            "task_url": result.get("task_url"),
+            "session_name": result.get("session_name")
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "message": "Teaching session failed",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
 @router.post("/sessions/send-message")
 async def send_message_to_session(
     session_type: str,
