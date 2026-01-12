@@ -490,6 +490,37 @@ async def run_broadcasts_migration():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/migrations/canonical-memory-content")
+async def run_canonical_memory_content_migration():
+    """Add content column to canonical_memory table."""
+    from db.neon import db_cursor
+    
+    try:
+        # Check if column already exists
+        with db_cursor() as cursor:
+            cursor.execute("""
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'canonical_memory'
+                AND column_name = 'content'
+            """)
+            if cursor.fetchone():
+                return {"status": "ok", "message": "Column 'content' already exists"}
+        
+        # Add the column
+        with db_cursor() as cursor:
+            cursor.execute("""
+                ALTER TABLE canonical_memory ADD COLUMN content TEXT
+            """)
+        
+        return {
+            "status": "ok",
+            "message": "Column 'content' added to canonical_memory table"
+        }
+    except Exception as e:
+        logger.error(f"Migration failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/migrations/broadcast-idempotency")
 async def run_broadcast_idempotency_migration():
     """Add unique constraint on broadcasts.session_id for idempotency."""
