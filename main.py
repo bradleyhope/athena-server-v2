@@ -160,9 +160,10 @@ def setup_scheduled_jobs():
     )
     
     # Synthesis - 4x daily (6am, 12pm, 6pm, 10pm London)
+    # NOTE: Runs at minute 0 to avoid overlap with hourly_broadcast at minute 30
     scheduler.add_job(
         run_synthesis,
-        CronTrigger(hour="6,12,18,22", minute=30),
+        CronTrigger(hour="6,12,18,22", minute=0),
         id="synthesis",
         name="Synthesis (Tier 3)",
         replace_existing=True

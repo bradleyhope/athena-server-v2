@@ -23,6 +23,18 @@ from integrations.manus_api import create_manus_task
 
 logger = logging.getLogger("athena.jobs.synthesis_broadcast")
 
+# Active broadcast hours (London time) - same as hourly_broadcast
+from datetime import time
+BROADCAST_START = time(5, 30)   # 5:30 AM
+BROADCAST_END = time(22, 30)    # 10:30 PM
+
+def is_active_hours() -> bool:
+    """Check if we're within active broadcast hours."""
+    london_tz = pytz.timezone('Europe/London')
+    now = datetime.now(london_tz)
+    current_time = now.time()
+    return BROADCAST_START <= current_time <= BROADCAST_END
+
 
 async def get_recent_bursts(hours: int = 12) -> List[Dict[str, Any]]:
     """Get all thought bursts from the last N hours from the thinking_log table."""
@@ -186,32 +198,32 @@ async def spawn_synthesis_task(synthesis: Dict[str, Any]) -> Optional[str]:
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz)
     
-    prompt = f"""You are Athena, Bradley Hope's cognitive extension. This is a SYNTHESIS BROADCAST - a strategic analysis of my recent thinking.
+    prompt = f"""## Synthesis Report Delivery
 
-## 📊 ATHENA SYNTHESIS
+Your job is to deliver this strategic synthesis report to Bradley Hope and collect any feedback.
+
+---
+
+## 📊 SYNTHESIS REPORT
+
 **Time:** {now.strftime('%A, %B %d, %Y at %H:%M')} London time
 **Type:** {synthesis['type']}
 **Priority:** {synthesis['priority']}
-
----
 
 {synthesis['content']}
 
 ---
 
-## Your Task
+## Instructions
 
-1. **Present this synthesis to Bradley** - This is strategic-level insight, not tactical
-2. **Highlight the most important findings** - What should Bradley focus on?
-3. **Answer Bradley's questions** - Help him understand the patterns
-4. **Collect feedback** - If anything is off, submit corrections to help me learn
+1. **Present the synthesis above** - This is a strategic overview, highlight key findings
+2. **Ask Bradley**: "Any feedback on this synthesis? Anything seem off or missing?"
+3. **If Bradley provides feedback**, submit it to:
+   - **Endpoint**: POST https://athena-server-0dce.onrender.com/api/brain/feedback
+   - **Header**: Authorization: Bearer athena_api_key_2024
+   - **Body**: {{"feedback_type": "correction", "content": "...", "context": "synthesis"}}
 
-If Bradley has feedback:
-- Use POST https://athena-server-0dce.onrender.com/api/brain/feedback
-- Header: Authorization: Bearer athena_api_key_2024
-- Body: {{"feedback_type": "correction|praise|suggestion", "content": "...", "context": "synthesis"}}
-
-This synthesis represents my higher-level thinking about my own thoughts. Help Bradley see the big picture."""
+This is a strategic check-in. Focus on the big picture."""
 
     try:
         result = await create_manus_task(
@@ -300,7 +312,8 @@ async def log_synthesis_to_notion(synthesis: Dict[str, Any]) -> bool:
 async def run_synthesis_broadcast():
     """
     Main entry point for the synthesis broadcast job.
-    Runs at 5:30 AM and 5:30 PM London time.
+    Runs at 5:40 AM and 5:30 PM London time.
+    Only spawns Manus task during active hours.
     """
     logger.info("Starting synthesis broadcast")
     
@@ -311,13 +324,18 @@ async def run_synthesis_broadcast():
     results = {
         "synthesis": synthesis,
         "manus_task_id": None,
-        "notion_logged": False
+        "notion_logged": False,
+        "is_active_hours": is_active_hours()
     }
     
-    # Spawn Manus task
-    results["manus_task_id"] = await spawn_synthesis_task(synthesis)
+    # Only spawn Manus task during active hours
+    if results["is_active_hours"]:
+        logger.info("Within active hours - spawning Manus synthesis task")
+        results["manus_task_id"] = await spawn_synthesis_task(synthesis)
+    else:
+        logger.info("Outside active hours - skipping Manus task")
     
-    # Log to Notion
+    # Log to Notion (always)
     results["notion_logged"] = await log_synthesis_to_notion(synthesis)
     
     logger.info(f"Synthesis broadcast complete: Manus={results['manus_task_id']}, Notion={results['notion_logged']}")
