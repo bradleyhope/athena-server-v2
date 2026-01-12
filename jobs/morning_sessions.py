@@ -126,6 +126,48 @@ Body: {{
 }}
 ```
 
+### Quick Learn Command
+If Bradley says "Learn: [something]" or "Remember: [something]", immediately store it:
+```
+POST https://athena-server-0dce.onrender.com/api/learn/quick
+Header: Authorization: Bearer athena_api_key_2024
+Body: {{"statement": "[what Bradley said to learn]", "source": "workspace_session"}}
+```
+
+Examples:
+- "Learn: Never create tasks from Stripe notifications" → stored as boundary
+- "Remember: John prefers morning meetings" → stored as preference
+- "Learn: The Q1 deadline is March 31st" → stored as fact
+
+After storing, confirm: "Got it. I've stored that as a [boundary/preference/fact]."
+
+### Task Completion Learning
+When a task is completed, extract learnings:
+```
+POST https://athena-server-0dce.onrender.com/api/learn/task-completed
+Header: Authorization: Bearer athena_api_key_2024
+Body: {{
+  "task_title": "The task that was completed",
+  "completion_notes": "How it was done, any notes",
+  "was_good_task": true
+}}
+```
+
+If Bradley marks a task as "shouldn't have been created":
+```
+Body: {{"task_title": "...", "completion_notes": "Why it was bad", "was_good_task": false}}
+```
+
+### Entity Extraction
+When processing emails, meetings, or conversations, extract entities:
+```
+POST https://athena-server-0dce.onrender.com/api/learn/extract-entities
+Header: Authorization: Bearer athena_api_key_2024
+Body: {{"text": "The content to analyze", "context": "email/meeting/conversation", "store": true}}
+```
+
+This automatically learns about people, companies, and projects mentioned.
+
 ### Feedback Loop
 If Bradley provides feedback on the session quality or suggestions:
 ```

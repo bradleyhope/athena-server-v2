@@ -38,6 +38,7 @@ class SessionType(Enum):
     ATHENA_THINKING = "athena_thinking"
     SYNTHESIS_BROADCAST = "synthesis_broadcast"
     EDITING_SESSION = "editing_session"
+    TEACHING_SESSION = "teaching_session"
     # Add new types above this line
 
 
@@ -55,12 +56,16 @@ def _name_synthesis_broadcast(now: datetime) -> str:
 def _name_editing_session(now: datetime) -> str:
     return f"Athena Editing Session - {now.strftime('%B %d, %Y')}"
 
+def _name_teaching_session(now: datetime) -> str:
+    return f"Athena Teaching Session - {now.strftime('%B %d, %Y')}"
+
 
 SESSION_NAMING = {
     SessionType.WORKSPACE_AGENDA: _name_workspace_agenda,
     SessionType.ATHENA_THINKING: _name_athena_thinking,
     SessionType.SYNTHESIS_BROADCAST: _name_synthesis_broadcast,
     SessionType.EDITING_SESSION: _name_editing_session,
+    SessionType.TEACHING_SESSION: _name_teaching_session,
 }
 
 
@@ -76,6 +81,7 @@ SESSION_IDEMPOTENCY = {
     SessionType.ATHENA_THINKING: IdempotencyRule.ONE_PER_DAY,
     SessionType.SYNTHESIS_BROADCAST: IdempotencyRule.ONE_PER_PERIOD,
     SessionType.EDITING_SESSION: IdempotencyRule.ONE_PER_DAY,
+    SessionType.TEACHING_SESSION: IdempotencyRule.ONE_PER_DAY,
 }
 
 
