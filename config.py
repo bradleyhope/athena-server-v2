@@ -48,6 +48,8 @@ class Settings:
     BROADCASTS_DATABASE_ID: str = "70b8cb6eff9845d98492ce16c4e2e9aa"
     SESSION_ARCHIVE_DB_ID: str = "d075385d-b6f3-472b-b53f-e528f4ed22db"
     ATHENA_TASKS_DB_ID: str = "44aa96e7-eb95-45ac-9b28-f3bfffec6802"
+    ATHENA_BRAINSTORM_DB_ID: str = "d1b506d9-4b2a-4a46-8037-c71b3fa8e185"
+    ATHENA_PROJECTS_DB_ID: str = "de557503-871f-4a35-9754-826c16e0ea88"
 
     # Broadcast Schedule (London time)
     BROADCAST_START_HOUR: int = 5

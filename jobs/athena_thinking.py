@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
 from config import settings, MANUS_CONNECTORS
-from db.neon import db_cursor, set_active_session
+from db.neon import db_cursor, set_active_session, get_active_session
 from db.brain import (
     get_brain_status, get_core_identity, get_boundaries, get_values,
     get_continuous_state_context
@@ -418,13 +418,29 @@ By the end of this session, you should have:
     return result
 
 
-async def run_athena_thinking():
+async def run_athena_thinking(force: bool = False):
     """
     Main entry point for ATHENA THINKING job.
     Deep introspection and self-improvement session.
+
+    Args:
+        force: If True, create new session even if one exists today.
     """
     logger.info("Starting ATHENA THINKING session (introspection mode)")
-    
+
+    # IDEMPOTENCY CHECK: Don't create duplicate sessions for today
+    today = datetime.now().date()
+    if not force:
+        existing = get_active_session('athena_thinking')
+        if existing and existing.get('session_date') == today:
+            logger.info(f"ATHENA THINKING session already exists for today: {existing.get('manus_task_id')}")
+            return {
+                "status": "already_exists",
+                "task_id": existing.get('manus_task_id'),
+                "task_url": existing.get('manus_task_url'),
+                "message": "Session already exists for today. Use force=True to create a new one."
+            }
+
     # Spawn the thinking session
     result = await spawn_thinking_session()
     
