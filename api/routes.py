@@ -490,35 +490,49 @@ async def run_broadcasts_migration():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/migrations/canonical-memory-content")
-async def run_canonical_memory_content_migration():
-    """Add content column to canonical_memory table."""
+@router.post("/migrations/canonical-memory-columns")
+async def run_canonical_memory_columns_migration():
+    """Add missing columns to canonical_memory table (content, source, confidence)."""
     from db.neon import db_cursor
     
-    try:
-        # Check if column already exists
-        with db_cursor() as cursor:
-            cursor.execute("""
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'canonical_memory'
-                AND column_name = 'content'
-            """)
-            if cursor.fetchone():
-                return {"status": "ok", "message": "Column 'content' already exists"}
-        
-        # Add the column
-        with db_cursor() as cursor:
-            cursor.execute("""
-                ALTER TABLE canonical_memory ADD COLUMN content TEXT
-            """)
-        
-        return {
-            "status": "ok",
-            "message": "Column 'content' added to canonical_memory table"
-        }
-    except Exception as e:
-        logger.error(f"Migration failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    columns_to_add = [
+        ("content", "TEXT"),
+        ("source", "TEXT"),
+        ("confidence", "FLOAT DEFAULT 1.0")
+    ]
+    
+    added = []
+    skipped = []
+    
+    for col_name, col_type in columns_to_add:
+        try:
+            # Check if column already exists
+            with db_cursor() as cursor:
+                cursor.execute("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'canonical_memory'
+                    AND column_name = %s
+                """, (col_name,))
+                if cursor.fetchone():
+                    skipped.append(col_name)
+                    continue
+            
+            # Add the column
+            with db_cursor() as cursor:
+                cursor.execute(f"""
+                    ALTER TABLE canonical_memory ADD COLUMN {col_name} {col_type}
+                """)
+            added.append(col_name)
+        except Exception as e:
+            logger.error(f"Failed to add column {col_name}: {e}")
+            skipped.append(f"{col_name} (error: {str(e)})")
+    
+    return {
+        "status": "ok",
+        "message": f"Added {len(added)} columns, skipped {len(skipped)}",
+        "added": added,
+        "skipped": skipped
+    }
 
 
 @router.post("/migrations/broadcast-idempotency")
