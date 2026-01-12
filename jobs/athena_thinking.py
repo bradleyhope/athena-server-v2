@@ -9,13 +9,13 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
-from config import settings, MANUS_CONNECTORS
-from db.neon import db_cursor, set_active_session, get_active_session
+from config import settings
+from db.neon import db_cursor
 from db.brain import (
     get_brain_status, get_core_identity, get_boundaries, get_values,
     get_continuous_state_context
 )
-from integrations.manus_api import create_manus_task, rename_manus_task
+from sessions import SessionType, create_managed_session
 
 logger = logging.getLogger("athena.jobs.thinking")
 
@@ -246,18 +246,17 @@ def format_learnings_for_prompt(learnings: Dict) -> str:
     return "\n".join(lines)
 
 
-async def spawn_thinking_session():
+def get_thinking_prompt() -> str:
     """
-    Spawn the ATHENA THINKING session - a deep introspection session.
+    Generate the ATHENA THINKING session prompt.
     This is NOT about Bradley's tasks - it's about Athena improving herself.
     """
     today = datetime.now().strftime("%B %d, %Y")
-    session_name = f"ATHENA THINKING {today}"
-    
+
     # Collect system metrics
     metrics = get_system_metrics()
     learnings = get_recent_learnings()
-    
+
     # Get brain context
     try:
         brain_status = get_brain_status()
@@ -268,18 +267,18 @@ async def spawn_thinking_session():
         brain_status = {}
         identity = {}
         boundaries = []
-    
+
     # Format data for prompt
     metrics_str = format_metrics_for_prompt(metrics)
     learnings_str = format_learnings_for_prompt(learnings)
-    
+
     # Count key stats
     total_observations = metrics["observations"]["total"]
     total_patterns = metrics["patterns"]["total"]
     pending_proposals = metrics["evolution_proposals"]["pending"]
     rejected_count = metrics["evolution_proposals"]["rejected"]
-    
-    task_prompt = f"""# ATHENA THINKING - Deep Introspection Session
+
+    return f"""# ATHENA THINKING - Deep Introspection Session
 **Date:** {today}
 
 ---
@@ -388,34 +387,6 @@ By the end of this session, you should have:
 
 **Begin your analysis. Start with the Pipeline Health Check.**
 """
-    
-    # Use minimal connectors - this session doesn't need email/calendar
-    # Just Notion for reference if needed
-    connectors = ["9c27c684-2f4f-4d33-8fcf-51664ea15c00"]  # Notion only
-    
-    result = await create_manus_task(
-        task_prompt=task_prompt,
-        model=settings.MANUS_MODEL_FULL,
-        connectors=connectors,
-        session_type='athena_thinking'
-    )
-    
-    if result and result.get('id'):
-        # Rename the task
-        await rename_manus_task(result['id'], session_name)
-        
-        # Save to active sessions
-        try:
-            set_active_session(
-                session_type='athena_thinking',
-                manus_task_id=result['id'],
-                manus_task_url=f"https://manus.im/app/{result['id']}"
-            )
-            logger.info(f"Saved active session: {result['id']}")
-        except Exception as e:
-            logger.error(f"Failed to save active session: {e}")
-    
-    return result
 
 
 async def run_athena_thinking(force: bool = False):
@@ -428,33 +399,15 @@ async def run_athena_thinking(force: bool = False):
     """
     logger.info("Starting ATHENA THINKING session (introspection mode)")
 
-    # IDEMPOTENCY CHECK: Don't create duplicate sessions for today
-    today = datetime.now().date()
-    if not force:
-        existing = get_active_session('athena_thinking')
-        if existing and existing.get('session_date') == today:
-            logger.info(f"ATHENA THINKING session already exists for today: {existing.get('manus_task_id')}")
-            return {
-                "status": "already_exists",
-                "task_id": existing.get('manus_task_id'),
-                "task_url": existing.get('manus_task_url'),
-                "message": "Session already exists for today. Use force=True to create a new one."
-            }
+    # Get the prompt
+    prompt = get_thinking_prompt()
 
-    # Spawn the thinking session
-    result = await spawn_thinking_session()
-    
-    if result and result.get('id'):
-        logger.info(f"ATHENA THINKING session created: {result['id']}")
-        return {
-            "status": "success",
-            "task_id": result['id'],
-            "task_url": f"https://manus.im/app/{result['id']}",
-            "session_type": "introspection"
-        }
-    else:
-        logger.error("Failed to create ATHENA THINKING session")
-        return {
-            "status": "failed",
-            "error": "Failed to create Manus session"
-        }
+    # Use centralized session manager - handles idempotency, naming, etc.
+    result = await create_managed_session(
+        session_type=SessionType.ATHENA_THINKING,
+        prompt=prompt,
+        force=force,
+        connectors=["9c27c684-2f4f-4d33-8fcf-51664ea15c00"]  # Notion only
+    )
+
+    return result
