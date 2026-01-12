@@ -254,6 +254,8 @@ async def run_editing_session(force: bool = False) -> Dict[str, Any]:
             connectors=MANUS_CONNECTORS
         )
 
+        logger.info(f"Manus API result: {result}")
+        
         if result and result.get('id'):
             task_id = result['id']
             task_url = f"https://manus.im/app/{task_id}"
@@ -278,10 +280,11 @@ async def run_editing_session(force: bool = False) -> Dict[str, Any]:
                 "session_name": session_name
             }
         else:
-            logger.error("Failed to create editing session")
+            logger.error(f"Failed to create editing session, result: {result}")
             return {
                 "status": "error",
-                "error": "Failed to create Manus task"
+                "error": "Failed to create Manus task",
+                "manus_result": result
             }
 
     except Exception as e:

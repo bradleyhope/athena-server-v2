@@ -602,7 +602,8 @@ async def trigger_editing_session(force: bool = False):
             "task_url": result.get("task_url"),
             "session_name": result.get("session_name"),
             "error": result.get("error"),
-            "traceback": result.get("traceback")
+            "traceback": result.get("traceback"),
+            "manus_result": result.get("manus_result")
         }
     except Exception as e:
         import traceback
