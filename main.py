@@ -108,23 +108,8 @@ app.add_middleware(
 )
 
 
-# Authentication dependency
-async def verify_api_key(authorization: str = Header(None)):
-    """Verify API key for protected endpoints."""
-    if not settings.ATHENA_API_KEY:
-        return True  # No auth in development
-    
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-    
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid Authorization format")
-    
-    token = authorization.replace("Bearer ", "")
-    if token != settings.ATHENA_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    
-    return True
+# Authentication dependency - imported from shared module
+from api.auth import verify_api_key
 
 
 def setup_scheduled_jobs():

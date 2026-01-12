@@ -42,7 +42,19 @@ class Settings:
     CANONICAL_MEMORY_ID: str = "2e4d44b3-a00b-810e-9ac1-cbd30e209fab"
     VIP_CONTACTS_ID: str = "2e4d44b3-a00b-8112-8eb2-ef28cec19ae6"
     POLICIES_RULES_ID: str = "2e4d44b3-a00b-813c-a564-c7950f0db4a5"
-    
+    WORKSPACE_GUIDE_PAGE_ID: str = "2e5d44b3-a00b-813f-83fa-f3f3859d3ce8"
+
+    # Notion Database IDs
+    BROADCASTS_DATABASE_ID: str = "70b8cb6eff9845d98492ce16c4e2e9aa"
+    SESSION_ARCHIVE_DB_ID: str = "d075385d-b6f3-472b-b53f-e528f4ed22db"
+    ATHENA_TASKS_DB_ID: str = "44aa96e7-eb95-45ac-9b28-f3bfffec6802"
+
+    # Broadcast Schedule (London time)
+    BROADCAST_START_HOUR: int = 5
+    BROADCAST_START_MINUTE: int = 30
+    BROADCAST_END_HOUR: int = 22
+    BROADCAST_END_MINUTE: int = 30
+
     # AI Model IDs (validated January 10, 2026)
     TIER1_MODEL: str = "gpt-5-nano"
     TIER2_MODEL: str = "claude-haiku-4-5-20251001"

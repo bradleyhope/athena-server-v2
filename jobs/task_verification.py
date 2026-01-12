@@ -5,22 +5,18 @@ Verifies and enriches tasks logged by Gemini, filters noise,
 and generates daily impressions.
 """
 
-import os
 import json
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
 import httpx
 
+from config import settings
+
 logger = logging.getLogger("athena.task_verification")
 
 # Notion API configuration
-NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 NOTION_VERSION = "2022-06-28"
-ATHENA_TASKS_DB_ID = "44aa96e7-eb95-45ac-9b28-f3bfffec6802"
-
-# AI configuration
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 
 class TaskVerifier:
@@ -28,21 +24,21 @@ class TaskVerifier:
     
     def __init__(self):
         self.notion_headers = {
-            "Authorization": f"Bearer {NOTION_API_KEY}",
+            "Authorization": f"Bearer {settings.NOTION_API_KEY}",
             "Notion-Version": NOTION_VERSION,
             "Content-Type": "application/json"
         }
-    
+
     async def get_unverified_tasks(self) -> list:
         """
         Query Athena Tasks DB for recent Gemini-logged tasks.
         Looks for: Source=Email, Status=Not Started (unverified)
         """
-        if not NOTION_API_KEY:
+        if not settings.NOTION_API_KEY:
             logger.warning("NOTION_API_KEY not set, skipping task verification")
             return []
-        
-        url = f"https://api.notion.com/v1/databases/{ATHENA_TASKS_DB_ID}/query"
+
+        url = f"https://api.notion.com/v1/databases/{settings.ATHENA_TASKS_DB_ID}/query"
         
         # Filter for unverified email-sourced tasks
         filter_payload = {
@@ -155,7 +151,7 @@ class TaskVerifier:
                 }
             }
         """
-        if not ANTHROPIC_API_KEY:
+        if not settings.ANTHROPIC_API_KEY:
             logger.warning("ANTHROPIC_API_KEY not set, auto-keeping task")
             return {"keep": True, "reason": "No AI verification available", "enriched": {}}
         
@@ -185,7 +181,7 @@ Respond in JSON format:
 
         try:
             from anthropic import Anthropic
-            client = Anthropic(api_key=ANTHROPIC_API_KEY)
+            client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
             
             response = client.messages.create(
                 model="claude-3-5-haiku-20241022",
@@ -214,7 +210,7 @@ Respond in JSON format:
         - KEEP: Update status to "To Do", add enriched context
         - DISCARD: Update status to "Done", add reason in context
         """
-        if not NOTION_API_KEY:
+        if not settings.NOTION_API_KEY:
             return False
         
         url = f"https://api.notion.com/v1/pages/{task_id}"
@@ -276,7 +272,7 @@ class ImpressionGenerator:
             }
         ]
         """
-        if not ANTHROPIC_API_KEY:
+        if not settings.ANTHROPIC_API_KEY:
             logger.warning("ANTHROPIC_API_KEY not set, skipping impression generation")
             return []
         
@@ -317,7 +313,7 @@ Respond in JSON format:
 
         try:
             from anthropic import Anthropic
-            client = Anthropic(api_key=ANTHROPIC_API_KEY)
+            client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
             
             response = client.messages.create(
                 model="claude-3-5-haiku-20241022",

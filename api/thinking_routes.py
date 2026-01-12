@@ -10,6 +10,7 @@ from typing import Optional, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from api.errors import handle_api_errors
 from db.neon import db_cursor
 
 logger = logging.getLogger("athena.api.thinking")
@@ -40,17 +41,18 @@ class ThoughtResponse(BaseModel):
 
 
 @router.post("/log")
+@handle_api_errors("log thought")
 async def log_thought(thought: ThoughtCreate):
     """
     Log a thought from ATHENA THINKING session.
     This is the main endpoint for think bursts.
     """
     logger.info(f"Logging thought: type={thought.thought_type}, session={thought.session_id}")
-    
+
     with db_cursor() as cursor:
         # Serialize metadata to JSON string for JSONB column
         metadata_json = json.dumps(thought.metadata) if thought.metadata else None
-        
+
         cursor.execute("""
             INSERT INTO thinking_log (session_id, thought_type, content, confidence, phase, metadata)
             VALUES (%s, %s, %s, %s, %s, %s)
@@ -63,13 +65,13 @@ async def log_thought(thought: ThoughtCreate):
             thought.phase,
             metadata_json
         ))
-        
+
         result = cursor.fetchone()
         thought_id = str(result['id'])
         created_at = result['created_at'].isoformat() if result['created_at'] else None
-    
+
     logger.info(f"Thought logged: id={thought_id}")
-    
+
     return {
         "id": thought_id,
         "message": "Thought logged successfully",
@@ -78,6 +80,7 @@ async def log_thought(thought: ThoughtCreate):
 
 
 @router.get("/status/{session_id}")
+@handle_api_errors("get thinking status")
 async def get_thinking_status(session_id: str, limit: int = 10):
     """
     Get the current thinking status for a session.
@@ -92,12 +95,12 @@ async def get_thinking_status(session_id: str, limit: int = 10):
             ORDER BY created_at DESC
             LIMIT %s
         """, (session_id, limit))
-        
+
         rows = cursor.fetchall()
-        
+
         thoughts = []
         current_phase = None
-        
+
         for row in rows:
             thought = {
                 "id": str(row['id']),
@@ -109,21 +112,21 @@ async def get_thinking_status(session_id: str, limit: int = 10):
                 "timestamp": row['created_at'].isoformat() if row['created_at'] else None
             }
             thoughts.append(thought)
-            
+
             # Track the most recent phase
             if row['phase'] and not current_phase:
                 current_phase = row['phase']
-        
+
         # Get thought counts by type
         cursor.execute("""
             SELECT thought_type, COUNT(*) as count
-            FROM thinking_log 
-            WHERE session_id = %s 
+            FROM thinking_log
+            WHERE session_id = %s
             GROUP BY thought_type
         """, (session_id,))
-        
+
         type_counts = {row['thought_type']: row['count'] for row in cursor.fetchall()}
-        
+
         # Get pending questions
         cursor.execute("""
             SELECT id, content, created_at
@@ -132,12 +135,12 @@ async def get_thinking_status(session_id: str, limit: int = 10):
             ORDER BY created_at DESC
             LIMIT 5
         """, (session_id,))
-        
+
         pending_questions = [
             {"id": str(row['id']), "content": row['content'], "timestamp": row['created_at'].isoformat() if row['created_at'] else None}
             for row in cursor.fetchall()
         ]
-    
+
     return {
         "session_id": session_id,
         "status": "active" if thoughts else "no_activity",
@@ -149,6 +152,7 @@ async def get_thinking_status(session_id: str, limit: int = 10):
 
 
 @router.get("/recent")
+@handle_api_errors("get recent thoughts")
 async def get_recent_thoughts(hours: int = 24, thought_type: Optional[str] = None, limit: int = 50):
     """
     Get recent thoughts across all sessions.
@@ -156,7 +160,7 @@ async def get_recent_thoughts(hours: int = 24, thought_type: Optional[str] = Non
     """
     with db_cursor() as cursor:
         since = datetime.utcnow() - timedelta(hours=hours)
-        
+
         if thought_type:
             cursor.execute("""
                 SELECT id, session_id, thought_type, content, confidence, phase, metadata, created_at
@@ -173,9 +177,9 @@ async def get_recent_thoughts(hours: int = 24, thought_type: Optional[str] = Non
                 ORDER BY created_at DESC
                 LIMIT %s
             """, (since, limit))
-        
+
         rows = cursor.fetchall()
-        
+
         thoughts = [
             {
                 "id": str(row['id']),
@@ -189,7 +193,7 @@ async def get_recent_thoughts(hours: int = 24, thought_type: Optional[str] = Non
             }
             for row in rows
         ]
-    
+
     return {
         "count": len(thoughts),
         "hours": hours,
@@ -198,15 +202,16 @@ async def get_recent_thoughts(hours: int = 24, thought_type: Optional[str] = Non
 
 
 @router.get("/sessions/active")
+@handle_api_errors("get active thinking sessions")
 async def get_active_thinking_sessions(hours: int = 24):
     """
     Get all sessions with thinking activity in the last N hours.
     """
     with db_cursor() as cursor:
         since = datetime.utcnow() - timedelta(hours=hours)
-        
+
         cursor.execute("""
-            SELECT 
+            SELECT
                 session_id,
                 COUNT(*) as thought_count,
                 MIN(created_at) as first_thought,
@@ -217,9 +222,9 @@ async def get_active_thinking_sessions(hours: int = 24):
             GROUP BY session_id
             ORDER BY MAX(created_at) DESC
         """, (since,))
-        
+
         rows = cursor.fetchall()
-        
+
         sessions = [
             {
                 "session_id": row['session_id'],
@@ -230,7 +235,7 @@ async def get_active_thinking_sessions(hours: int = 24):
             }
             for row in rows
         ]
-    
+
     return {
         "count": len(sessions),
         "hours": hours,
@@ -239,6 +244,7 @@ async def get_active_thinking_sessions(hours: int = 24):
 
 
 @router.delete("/session/{session_id}")
+@handle_api_errors("clear session thoughts")
 async def clear_session_thoughts(session_id: str):
     """
     Clear all thoughts for a session.
@@ -249,9 +255,9 @@ async def clear_session_thoughts(session_id: str):
             DELETE FROM thinking_log WHERE session_id = %s
             RETURNING id
         """, (session_id,))
-        
+
         deleted = cursor.fetchall()
-    
+
     return {
         "message": f"Cleared {len(deleted)} thoughts for session {session_id}",
         "deleted_count": len(deleted)

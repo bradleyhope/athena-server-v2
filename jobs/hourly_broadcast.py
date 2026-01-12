@@ -26,19 +26,13 @@ from integrations.manus_api import create_manus_task
 
 logger = logging.getLogger("athena.jobs.hourly_broadcast")
 
-# Athena Broadcasts database ID
-BROADCASTS_DATABASE_ID = "70b8cb6eff9845d98492ce16c4e2e9aa"
-
-# Reference pages
-WORKSPACE_GUIDE_PAGE_ID = "2e5d44b3-a00b-813f-83fa-f3f3859d3ce8"
-
-# Active broadcast hours (London time)
-BROADCAST_START = time(5, 30)   # 5:30 AM
-BROADCAST_END = time(22, 30)    # 10:30 PM
+# Build broadcast time window from config
+BROADCAST_START = time(settings.BROADCAST_START_HOUR, settings.BROADCAST_START_MINUTE)
+BROADCAST_END = time(settings.BROADCAST_END_HOUR, settings.BROADCAST_END_MINUTE)
 
 
 def is_active_hours() -> bool:
-    """Check if we're within active broadcast hours (5:30 AM - 10:30 PM London)."""
+    """Check if we're within active broadcast hours (configurable via settings)."""
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz).time()
     return BROADCAST_START <= now <= BROADCAST_END
@@ -227,7 +221,7 @@ async def send_to_notion(thought: Dict[str, Any]) -> bool:
                     "Notion-Version": "2022-06-28"
                 },
                 json={
-                    "parent": {"database_id": BROADCASTS_DATABASE_ID},
+                    "parent": {"database_id": settings.BROADCASTS_DATABASE_ID},
                     "properties": {
                         "Name": {
                             "title": [{"text": {"content": thought["title"][:100]}}]
