@@ -426,6 +426,7 @@ async def quick_learn(
 
     elif classification["type"] == "fact":
         # Store in canonical memory
+        import json
         with db_cursor() as cursor:
             cursor.execute("""
                 INSERT INTO canonical_memory (category, key, value, content, source, confidence)
@@ -434,7 +435,7 @@ async def quick_learn(
             """, (
                 classification.get("category", "facts"),
                 f"quick_learn_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-                statement,  # value column (required)
+                json.dumps(statement),  # value column (required, JSON format)
                 statement,  # content column (for display)
                 source
             ))
