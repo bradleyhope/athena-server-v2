@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional, List
 import pytz
 
 from config import settings, MANUS_CONNECTORS
-from db.neon import db_cursor
+from db.neon import db_cursor, get_active_session, set_active_session
 from db.brain import (
     get_brain_status, get_continuous_state_context,
     get_recent_observations, get_recent_patterns,
@@ -341,29 +341,60 @@ async def log_synthesis_to_notion(synthesis: Dict[str, Any]) -> bool:
         return False
 
 
-async def run_synthesis_broadcast():
+async def run_synthesis_broadcast(force: bool = False):
     """
     Main entry point for the synthesis broadcast job.
     Runs at 5:40 AM and 5:30 PM London time.
     Only spawns Manus task during active hours.
+
+    Args:
+        force: If True, create new task even if one exists for this period.
     """
     logger.info("Starting synthesis broadcast")
-    
+
     # Generate the synthesis
     synthesis = await generate_synthesis()
     logger.info(f"Generated synthesis: {synthesis['title']}")
-    
+
+    london_tz = pytz.timezone('Europe/London')
+    now = datetime.now(london_tz)
+    # Use session_id as idempotency key (includes date and hour)
+    session_id = synthesis.get('session_id', f"synthesis_{now.strftime('%Y%m%d_%H')}")
+
     results = {
         "synthesis": synthesis,
         "manus_task_id": None,
         "notion_logged": False,
-        "is_active_hours": is_active_hours()
+        "is_active_hours": is_active_hours(),
+        "session_id": session_id
     }
-    
+
+    # IDEMPOTENCY CHECK: Check if we've already spawned a task for this synthesis period
+    if not force:
+        existing = get_active_session('synthesis_broadcast')
+        if existing:
+            existing_date = existing.get('session_date')
+            # Only skip if same date AND same time period (morning/evening)
+            if existing_date == now.date():
+                # Check if it's the same period (AM vs PM)
+                existing_is_morning = existing.get('updated_at') and existing.get('updated_at').hour < 12
+                current_is_morning = now.hour < 12
+                if existing_is_morning == current_is_morning:
+                    logger.info(f"Synthesis task already exists for this period: {existing.get('manus_task_id')}")
+                    results["manus_task_id"] = existing.get('manus_task_id')
+                    results["status"] = "already_exists"
+                    # Still log to Notion
+                    results["notion_logged"] = await log_synthesis_to_notion(synthesis)
+                    return results
+
     # Only spawn Manus task during active hours
     if results["is_active_hours"]:
         logger.info("Within active hours - spawning Manus synthesis task")
-        results["manus_task_id"] = await spawn_synthesis_task(synthesis)
+        task_id = await spawn_synthesis_task(synthesis)
+        results["manus_task_id"] = task_id
+        # Track this session for idempotency
+        if task_id:
+            set_active_session('synthesis_broadcast', task_id, f"https://manus.im/app/{task_id}")
     else:
         logger.info("Outside active hours - skipping Manus task")
     

@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from integrations.manus_api import create_manus_task, rename_manus_task
-from db.neon import set_active_session
+from db.neon import set_active_session, get_active_session
 from db.brain import (
     get_core_identity,
     get_boundaries,
@@ -160,18 +160,35 @@ Begin by executing Steps 1-7 to present the morning brief.
     return prompt
 
 
-async def run_morning_sessions():
+async def run_morning_sessions(force: bool = False):
     """
     Run the morning sessions job.
     Creates the Workspace & Agenda session for the day.
+
+    Args:
+        force: If True, create new session even if one exists today.
     """
     logger.info("Starting morning sessions job")
-    
+
     # Generate session name: "MONTH DD - Daily Agenda and Workspace Instructions"
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz)
+    today = now.date()
     session_name = f"{now.strftime('%B').upper()} {now.day} - Daily Agenda and Workspace Instructions"
-    
+
+    # IDEMPOTENCY CHECK: Don't create duplicate sessions for today
+    if not force:
+        existing = get_active_session('workspace_agenda')
+        if existing and existing.get('session_date') == today:
+            logger.info(f"Session already exists for today: {existing.get('manus_task_id')}")
+            return {
+                "status": "already_exists",
+                "task_id": existing.get('manus_task_id'),
+                "task_url": existing.get('manus_task_url'),
+                "session_name": session_name,
+                "message": "Session already exists for today. Use force=True to create a new one."
+            }
+
     try:
         # Get the prompt
         prompt = get_workspace_agenda_prompt()

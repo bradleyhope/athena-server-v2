@@ -263,21 +263,44 @@ async def trigger_synthesis(background_tasks: BackgroundTasks):
 
 
 @router.post("/trigger/athena-thinking")
-async def trigger_athena_thinking(background_tasks: BackgroundTasks):
-    """Manually trigger ATHENA THINKING session (hybrid: server-side + Manus broadcast)."""
+async def trigger_athena_thinking(background_tasks: BackgroundTasks, force: bool = False):
+    """
+    Manually trigger ATHENA THINKING session (hybrid: server-side + Manus broadcast).
+
+    Args:
+        force: If True, create new session even if one exists today.
+    """
     from jobs.athena_thinking import run_athena_thinking
-    
-    background_tasks.add_task(run_athena_thinking)
+
+    # Can't pass force to background task easily, so check here first
+    if not force:
+        from db.neon import get_active_session
+        from datetime import datetime
+        existing = get_active_session('athena_thinking')
+        if existing and existing.get('session_date') == datetime.now().date():
+            return {
+                "message": "ATHENA THINKING session already exists for today",
+                "status": "already_exists",
+                "task_id": existing.get('manus_task_id'),
+                "hint": "Use force=true to create a new session"
+            }
+
+    background_tasks.add_task(run_athena_thinking, force)
     return {"message": "ATHENA THINKING triggered", "status": "running"}
 
 
 @router.post("/trigger/athena-thinking-sync")
-async def trigger_athena_thinking_sync():
-    """Synchronously trigger ATHENA THINKING for debugging."""
+async def trigger_athena_thinking_sync(force: bool = False):
+    """
+    Synchronously trigger ATHENA THINKING for debugging.
+
+    Args:
+        force: If True, create new session even if one exists today.
+    """
     from jobs.athena_thinking import run_athena_thinking
-    
+
     try:
-        result = await run_athena_thinking()
+        result = await run_athena_thinking(force=force)
         return {"message": "ATHENA THINKING completed", "result": result}
     except Exception as e:
         return {"message": "ATHENA THINKING failed", "error": str(e)}
@@ -371,14 +394,19 @@ async def get_live_thinking():
 
 
 @router.post("/trigger/morning-sessions")
-async def trigger_morning_sessions():
-    """Manually trigger the Workspace & Agenda session."""
+async def trigger_morning_sessions(force: bool = False):
+    """
+    Manually trigger the Workspace & Agenda session.
+
+    Args:
+        force: If True, create new session even if one exists today.
+    """
     from jobs.morning_sessions import run_morning_sessions
     import asyncio
-    
+
     # Run the async function directly and return result
     try:
-        result = await run_morning_sessions()
+        result = await run_morning_sessions(force=force)
         return {
             "message": "Morning session (Workspace & Agenda) created",
             "status": "success",
@@ -482,6 +510,48 @@ async def trigger_hourly_broadcast_sync():
     except Exception as e:
         import traceback
         return {"message": "Hourly broadcast failed", "error": str(e), "traceback": traceback.format_exc()}
+
+
+@router.post("/trigger/editing-session")
+async def trigger_editing_session(force: bool = False):
+    """
+    Trigger an Athena Editing Session for making safe configuration changes.
+
+    This is a special session type where Bradley can discuss and propose changes
+    to Athena's boundaries, workflows, and capabilities. All changes go through
+    the evolution proposal system for safety.
+
+    Args:
+        force: If True, create new session even if one exists today.
+    """
+    from jobs.editing_session import run_editing_session
+
+    try:
+        result = await run_editing_session(force=force)
+
+        if result.get("status") == "already_exists":
+            return {
+                "message": "Editing session already exists for today",
+                "status": "already_exists",
+                "task_id": result.get("task_id"),
+                "task_url": result.get("task_url"),
+                "hint": "Use force=true to create a new session"
+            }
+
+        return {
+            "message": "Editing session created",
+            "status": result.get("status"),
+            "task_id": result.get("task_id"),
+            "task_url": result.get("task_url"),
+            "session_name": result.get("session_name")
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "message": "Editing session failed",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 
 @router.post("/sessions/send-message")

@@ -435,10 +435,12 @@ def ensure_broadcasts_table():
 def store_broadcast(broadcast: dict) -> int:
     """
     Store a new broadcast and return its ID.
-    
+    Uses ON CONFLICT to prevent duplicates - if session_id already exists,
+    updates the content instead of creating a duplicate.
+
     Args:
         broadcast: Dict with title, content, type, priority, confidence, session_id
-        
+
     Returns:
         Broadcast ID
     """
@@ -449,6 +451,13 @@ def store_broadcast(broadcast: dict) -> int:
             ) VALUES (
                 %(session_id)s, %(title)s, %(content)s, %(type)s, %(priority)s, %(confidence)s, %(notion_synced)s
             )
+            ON CONFLICT (session_id) DO UPDATE SET
+                title = EXCLUDED.title,
+                content = EXCLUDED.content,
+                broadcast_type = EXCLUDED.broadcast_type,
+                priority = EXCLUDED.priority,
+                confidence = EXCLUDED.confidence,
+                created_at = NOW()
             RETURNING id
         """, {
             'session_id': broadcast.get('session_id', ''),
