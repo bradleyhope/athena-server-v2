@@ -553,6 +553,19 @@ async def init_sessions_table():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/migrations/broadcasts-table")
+async def run_broadcasts_migration():
+    """Create the broadcasts table if it doesn't exist."""
+    from db.neon import ensure_broadcasts_table
+    
+    try:
+        ensure_broadcasts_table()
+        return {"status": "ok", "message": "broadcasts table created/verified"}
+    except Exception as e:
+        logger.error(f"Failed to create broadcasts table: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/trigger/hourly-broadcast")
 async def trigger_hourly_broadcast(background_tasks: BackgroundTasks):
     """Manually trigger an hourly thought broadcast."""
