@@ -11,7 +11,8 @@ import pytz
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from integrations.manus_api import create_manus_task
+from integrations.manus_api import create_manus_task, rename_manus_task
+from db.neon import set_active_session
 from db.brain import (
     get_core_identity,
     get_boundaries,
@@ -172,6 +173,11 @@ async def run_morning_sessions():
     """
     logger.info("Starting morning sessions job")
     
+    # Generate session name: "MONTH DD - Daily Agenda and Workspace Instructions"
+    london_tz = pytz.timezone('Europe/London')
+    now = datetime.now(london_tz)
+    session_name = f"{now.strftime('%B').upper()} {now.day} - Daily Agenda and Workspace Instructions"
+    
     try:
         # Get the prompt
         prompt = get_workspace_agenda_prompt()
@@ -188,6 +194,21 @@ async def run_morning_sessions():
             task_url = f"https://manus.im/app/{task_id}"
             logger.info(f"Created Workspace & Agenda session: {task_id}")
             
+            # Rename the task with the proper naming convention
+            await rename_manus_task(task_id, session_name)
+            logger.info(f"Renamed session to: {session_name}")
+            
+            # Save to active sessions
+            try:
+                set_active_session(
+                    session_type='workspace_agenda',
+                    manus_task_id=task_id,
+                    manus_task_url=task_url
+                )
+                logger.info(f"Saved active session: {task_id}")
+            except Exception as e:
+                logger.error(f"Failed to save active session: {e}")
+            
             # Get brain context for response
             pending = get_pending_actions()
             
@@ -195,6 +216,7 @@ async def run_morning_sessions():
                 "status": "success",
                 "task_id": task_id,
                 "task_url": task_url,
+                "session_name": session_name,
                 "brain_context": {
                     "pending_actions": len(pending) if pending else 0,
                     "evolution_proposals": 1  # Placeholder
