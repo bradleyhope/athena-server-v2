@@ -124,5 +124,14 @@ When updating these documents:
 
 ---
 
-*Last updated: January 12, 2026*
+## COGOS Integration
+
+This repository is part of the COGOS project management system. See [COGOS_PROJECT.md](COGOS_PROJECT.md) for:
+- Project specification location
+- Cross-references with cogos-system repository
+- How to initialize ATHENA context in Manus sessions
+
+---
+
+*Last updated: January 13, 2026*
 *Maintained by: Athena Server v2*
