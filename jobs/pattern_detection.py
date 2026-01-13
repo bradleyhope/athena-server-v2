@@ -121,22 +121,34 @@ async def run_pattern_detection():
     stored_count = 0
     for pattern in patterns:
         try:
+            # Convert observation_ids to proper format (they come as strings from Claude)
+            observation_ids = pattern.get('observation_ids', [])
+            if observation_ids and isinstance(observation_ids[0], str):
+                # Validate that they look like UUIDs
+                try:
+                    from uuid import UUID
+                    observation_ids = [str(UUID(oid)) for oid in observation_ids]
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid observation IDs format: {e}, using empty list")
+                    observation_ids = []
+            
             pattern_data = {
                 'pattern_type': pattern['pattern_type'],
                 'description': pattern['description'],
-                'confidence': pattern['confidence'],
-                'observation_ids': pattern['observation_ids'],
+                'confidence': float(pattern['confidence']),
+                'observation_ids': observation_ids,
                 'detected_at': datetime.utcnow(),
+                'evidence': None,  # Will be set to default in store_pattern
                 'metadata': json.dumps({
                     'insight': pattern.get('insight', ''),
-                    'observation_count': len(pattern['observation_ids'])
+                    'observation_count': len(observation_ids)
                 })
             }
             store_pattern(pattern_data)
             stored_count += 1
             logger.info(f"Stored pattern: {pattern['pattern_type']} ({pattern['confidence']:.0%} confidence)")
         except Exception as e:
-            logger.error(f"Failed to store pattern: {e}")
+            logger.error(f"Failed to store pattern: {e}", exc_info=True)
     
     # FIX #1: Mark observations as processed (Tier 2)
     if observations:

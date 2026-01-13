@@ -259,6 +259,14 @@ def store_pattern(pattern: dict) -> str:
     # Add evidence_count to pattern dict
     pattern['evidence_count'] = evidence_count
     
+    # Provide default evidence if not supplied
+    if 'evidence' not in pattern:
+        pattern['evidence'] = None
+    
+    # Provide default detected_at if not supplied
+    if 'detected_at' not in pattern:
+        pattern['detected_at'] = datetime.now()
+    
     with db_cursor() as cursor:
         cursor.execute("""
             INSERT INTO patterns (
