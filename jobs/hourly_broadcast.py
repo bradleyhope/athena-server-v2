@@ -177,7 +177,7 @@ Your job is to relay the following broadcast to Bradley Hope and collect any fee
    - Add a new rule or boundary"
 
 3. **If Bradley provides feedback**, submit it to:
-   - **Endpoint**: POST https://athena-server-0dce.onrender.com/api/brain/feedback
+   - **Endpoint**: POST brain/feedback
    - **Header**: Authorization: Bearer athena_api_key_2024
    - **Body**: {{"feedback_type": "correction", "original_content": "...", "correction": "...", "severity": "minor"}}
 

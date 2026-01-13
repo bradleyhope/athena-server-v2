@@ -334,7 +334,7 @@ Based on your analysis, propose specific improvements:
 
 **To propose an improvement:**
 ```
-POST https://athena-server-0dce.onrender.com/api/brain/evolution
+POST brain/evolution
 Authorization: Bearer athena_api_key_2024
 Content-Type: application/json
 
@@ -350,7 +350,7 @@ Content-Type: application/json
 ### 5. Check for Unread Broadcasts
 Fetch any broadcasts you haven't seen:
 ```
-GET https://athena-server-0dce.onrender.com/api/broadcasts/unread
+GET broadcasts/unread
 Authorization: Bearer athena_api_key_2024
 ```
 

@@ -108,14 +108,14 @@ Bradley will tell me things. For each thing:
 
 ### For Boundaries (rules)
 ```
-POST https://athena-server-0dce.onrender.com/api/learn/quick
+POST learn/quick
 Header: Authorization: Bearer athena_api_key_2024
 Body: {{"statement": "The rule", "source": "teaching_session"}}
 ```
 
 ### For Entity Information
 ```
-POST https://athena-server-0dce.onrender.com/api/v1/entities
+POST v1/entities
 Header: Authorization: Bearer athena_api_key_2024
 Body: {{
   "entity_type": "person|organization|project",
@@ -127,14 +127,14 @@ Body: {{
 
 ### For VIP Status
 ```
-PATCH https://athena-server-0dce.onrender.com/api/v1/entities/{{id}}
+PATCH v1/entities/{{id}}
 Header: Authorization: Bearer athena_api_key_2024
 Body: {{"access_tier": "vip"}}
 ```
 
 ### For Preferences
 ```
-POST https://athena-server-0dce.onrender.com/api/brain/preferences
+POST brain/preferences
 Header: Authorization: Bearer athena_api_key_2024
 Body: {{
   "category": "communication|scheduling|projects|general",

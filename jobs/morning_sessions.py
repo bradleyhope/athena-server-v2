@@ -47,12 +47,9 @@ This task is to prepare and present Bradley Hope's daily brief, then remain avai
 Fetch the Notion page with ID: `{settings.ATHENA_COMMAND_CENTER_ID}`
 This contains the full operating instructions and context for this session.
 
-### Step 2: Fetch Active Rules (IMPORTANT)
-```
-GET https://athena-server-0dce.onrender.com/api/v1/learning/active-rules
-Header: Authorization: Bearer athena_api_key_2024
-```
-This returns boundaries, preferences, and canonical memory that MUST be applied to all actions.
+### Step 2: Load Boundaries & Preferences
+These are loaded from GitHub context (policies.md and preferences.md) and already injected into this prompt.
+They define the rules and constraints that MUST be applied to all actions.
 
 **Key rules to always follow:**
 - NEVER create tasks from notifications (OCBC, security alerts, Ghost signups, Scout reports)
@@ -69,12 +66,9 @@ Look for:
 - High priority items that need attention (Priority = "High")
 - Tasks where Status = "Athena Tasked" (tasks you're currently working on)
 
-### Step 4: Fetch the Brain API Brief
-```
-GET https://athena-server-0dce.onrender.com/api/brief
-Header: Authorization: Bearer athena_api_key_2024
-```
-This returns synthesis, patterns, pending drafts, and action items.
+### Step 4: Fetch Synthesis & Patterns
+Use the observation-burst and weekly-synthesis workflows to get synthesis and patterns.
+These are available in the GitHub context and provide insights from recent observations.
 
 ### Step 5: Check Today's Calendar
 Use google-calendar MCP to list today's events and meetings.
@@ -129,75 +123,35 @@ When a task is marked complete:
 ### Learning from the Session
 When you discover something new about Bradley's preferences or identify a rule that should be applied in future sessions:
 
-```
-POST https://athena-server-0dce.onrender.com/api/v1/learning/submit-report
-Header: Authorization: Bearer athena_api_key_2024
-Body: {{
-  "session_date": "{now.strftime('%Y-%m-%d')}",
-  "session_type": "workspace_agenda",
-  "accomplishments": ["list of what was accomplished"],
-  "learnings": [
-    {{
-      "category": "task_creation|email|scheduling|communication|architecture",
-      "rule": "The rule or learning",
-      "description": "Detailed explanation",
-      "target": "boundary|preference|canonical",
-      "severity": "low|medium|high"
-    }}
-  ],
-  "tips_for_tomorrow": ["list of tips for tomorrow's session"]
-}}
-```
+1. Record learnings in the Session Archive database
+2. Update the GitHub context files (policies.md, preferences.md, canonical-memory.md)
+3. These learnings will be synced to the database via the daily sync job
 
-### Quick Learn Command
-If Bradley says "Learn: [something]" or "Remember: [something]", immediately store it:
-```
-POST https://athena-server-0dce.onrender.com/api/learn/quick
-Header: Authorization: Bearer athena_api_key_2024
-Body: {{"statement": "[what Bradley said to learn]", "source": "workspace_session"}}
-```
-
-Examples:
-- "Learn: Never create tasks from Stripe notifications" → stored as boundary
-- "Remember: John prefers morning meetings" → stored as preference
-- "Learn: The Q1 deadline is March 31st" → stored as fact
+**Examples of learnings to record:**
+- "Never create tasks from Stripe notifications" → boundary
+- "John prefers morning meetings" → preference
+- "The Q1 deadline is March 31st" → canonical fact
 
 After storing, confirm: "Got it. I've stored that as a [boundary/preference/fact]."
 
 ### Task Completion Learning
-When a task is completed, extract learnings:
-```
-POST https://athena-server-0dce.onrender.com/api/learn/task-completed
-Header: Authorization: Bearer athena_api_key_2024
-Body: {{
-  "task_title": "The task that was completed",
-  "completion_notes": "How it was done, any notes",
-  "was_good_task": true
-}}
-```
-
-If Bradley marks a task as "shouldn't have been created":
-```
-Body: {{"task_title": "...", "completion_notes": "Why it was bad", "was_good_task": false}}
-```
+When a task is completed:
+1. Mark the task as "Done" in Notion
+2. Add completion notes to the Context field
+3. Record whether it was a good task or shouldn't have been created
+4. This data feeds into the observation-burst workflow for pattern detection
 
 ### Entity Extraction
-When processing emails, meetings, or conversations, extract entities:
-```
-POST https://athena-server-0dce.onrender.com/api/learn/extract-entities
-Header: Authorization: Bearer athena_api_key_2024
-Body: {{"text": "The content to analyze", "context": "email/meeting/conversation", "store": true}}
-```
-
-This automatically learns about people, companies, and projects mentioned.
+When processing emails, meetings, or conversations:
+1. Extract key entities (people, companies, projects)
+2. Store in the Athena Tasks database for future reference
+3. Update VIP contacts if relevant
 
 ### Feedback Loop
-If Bradley provides feedback on the session quality or suggestions:
-```
-POST https://athena-server-0dce.onrender.com/api/brain/feedback
-Header: Authorization: Bearer athena_api_key_2024
-Body: {{"feedback_type": "correction", "original_content": "...", "correction": "...", "severity": "minor|moderate|major"}}
-```
+If you identify issues or improvements needed:
+1. Record feedback in the Session Archive
+2. Update relevant context files on GitHub
+3. These will be reviewed and incorporated into future sessions
 
 ## END OF DAY
 
@@ -211,7 +165,7 @@ Body: {{"feedback_type": "correction", "original_content": "...", "correction": 
 
 - Bradley Hope is the founder of Brazen, an AI company
 - This workspace is part of the "Athena" system - Bradley's productivity assistant
-- The Brain API at athena-server-0dce.onrender.com stores observations, patterns, and learnings
+- Observations, patterns, and learnings are stored in the Neon database and synced with GitHub
 - All VIP contacts require explicit approval before any outreach
 - Learnings submitted are reviewed by Bradley before becoming active rules
 

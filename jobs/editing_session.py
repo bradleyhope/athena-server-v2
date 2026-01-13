@@ -128,21 +128,18 @@ Status: {brain_status.get('status', 'active') if brain_status else 'active'}
 | Broadcasts | `{settings.BROADCASTS_DATABASE_ID}` | Athena's broadcasts |
 | Session Archive | `{settings.SESSION_ARCHIVE_DB_ID}` | Session logs |
 
-### API Endpoints (Base: https://athena-server-0dce.onrender.com)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/brain/status` | GET | Current brain status |
-| `/api/brain/boundaries` | GET/POST | View/add boundaries |
-| `/api/brain/preferences` | GET/POST | View/set preferences |
-| `/api/brain/evolution` | POST | Submit evolution proposal |
-| `/api/v1/evolution/proposals/pending` | GET | View pending proposals |
-| `/api/v1/evolution/proposals/{{id}}/review` | POST | Approve/reject proposal |
+### Data Storage
+All changes are stored in the Neon PostgreSQL database:
+- **Boundaries** - Stored in the boundaries table
+- **Preferences** - Stored in canonical_memory table
+- **Evolution Proposals** - Stored in evolution_proposals table
+- **Brain Status** - Computed from database state
 
-**Auth Header**: `Authorization: Bearer athena_api_key_2024`
+Changes are automatically synced to GitHub via the daily sync job (Phase 2) and can be edited directly on GitHub (Phase 7 bidirectional sync).
 
 ---
 
-## HOW TO MAKE CHANGES
+## MAKING CHANGES SAFELY
 
 ### Option 1: Add a Boundary
 When Bradley says something like "Athena should never..." or "Always..."

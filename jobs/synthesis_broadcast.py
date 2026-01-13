@@ -251,7 +251,7 @@ Your job is to deliver this strategic synthesis report to Bradley Hope and colle
 1. **Present the synthesis above** - This is a strategic overview, highlight key findings
 2. **Ask Bradley**: "Any feedback on this synthesis? Anything seem off or missing?"
 3. **If Bradley provides feedback**, submit it to:
-   - **Endpoint**: POST https://athena-server-0dce.onrender.com/api/brain/feedback
+   - **Endpoint**: POST brain/feedback
    - **Header**: Authorization: Bearer athena_api_key_2024
    - **Body**: {{"feedback_type": "correction", "content": "...", "context": "synthesis"}}
 
