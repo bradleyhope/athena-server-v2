@@ -188,7 +188,17 @@ def build_context_injection() -> str:
     # Key Workflows
     sections.append("## Key Workflows\n")
     
-    key_workflows = ["email-response", "meeting-prep", "subscriber-thank-you"]
+    # Load all workflows (Phase 3 expansion: 7 workflows total)
+    key_workflows = [
+        "email-response",           # Email drafting and response
+        "meeting-prep",             # Meeting research and preparation
+        "subscriber-thank-you",     # Paid subscriber thank you
+        "task-delegation",          # Task acceptance and execution
+        "research-request",         # Research and analysis
+        "calendar-management",      # Calendar and scheduling
+        "vip-contact-handling"      # VIP contact special handling
+    ]
+    
     for workflow_name in key_workflows:
         workflow_content = load_workflow(workflow_name)
         if workflow_content:
