@@ -187,6 +187,13 @@ async def run_synthesis():
         previous_synthesis
     )
     
+    # FIX #2: Mark observations as processed (Tier 3)
+    if observations:
+        from db.neon import mark_observations_processed_tier3
+        observation_ids = [str(obs['id']) for obs in observations]
+        mark_observations_processed_tier3(observation_ids)
+        logger.info(f"Marked {len(observation_ids)} observations as processed (Tier 3)")
+    
     # Store synthesis
     synthesis_number = get_next_synthesis_number()
     

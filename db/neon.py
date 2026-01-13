@@ -228,6 +228,16 @@ def mark_observations_processed_tier2(observation_ids: list):
         """, (observation_ids,))
 
 
+def mark_observations_processed_tier3(observation_ids: list):
+    """Mark observations as processed by Tier 3."""
+    with db_cursor() as cursor:
+        cursor.execute("""
+            UPDATE observations 
+            SET processed_tier_3 = TRUE 
+            WHERE id = ANY(%s::uuid[])
+        """, (observation_ids,))
+
+
 def store_pattern(pattern: dict) -> str:
     """
     Store a new pattern and return its ID.

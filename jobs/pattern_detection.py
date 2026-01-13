@@ -138,6 +138,13 @@ async def run_pattern_detection():
         except Exception as e:
             logger.error(f"Failed to store pattern: {e}")
     
+    # FIX #1: Mark observations as processed (Tier 2)
+    if observations:
+        from db.neon import mark_observations_processed_tier2
+        observation_ids = [str(obs['id']) for obs in observations]
+        mark_observations_processed_tier2(observation_ids)
+        logger.info(f"Marked {len(observation_ids)} observations as processed (Tier 2)")
+    
     duration = (datetime.utcnow() - start_time).total_seconds()
     logger.info(f"Pattern detection complete: {stored_count} patterns from {len(observations)} observations in {duration:.1f}s")
     
