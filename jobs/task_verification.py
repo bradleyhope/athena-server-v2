@@ -234,6 +234,7 @@ Respond in JSON format:
                     }
         else:
             properties["Status"] = {"select": {"name": "Done"}}
+            properties["Done"] = {"checkbox": True}  # Mark as done for 2sync/Todoist compatibility
             properties["Context"] = {
                 "rich_text": [{"text": {"content": f"[Auto-discarded] {reason}"[:2000]}}]
             }
