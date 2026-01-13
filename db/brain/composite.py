@@ -218,9 +218,14 @@ def get_recent_observations(limit: int = 10) -> List[Dict]:
     """Get recent observations for context."""
     with db_cursor() as cursor:
         cursor.execute("""
-            SELECT category, content, source, confidence, created_at
+            SELECT
+                category,
+                COALESCE(summary, title) AS content,
+                source_type AS source,
+                1.0 AS confidence,
+                observed_at AS created_at
             FROM observations
-            ORDER BY created_at DESC
+            ORDER BY observed_at DESC
             LIMIT %s
         """, (limit,))
         return [
