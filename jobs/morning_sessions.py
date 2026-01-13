@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional
 from sessions import SessionType, create_managed_session
 from db.brain import get_pending_actions
 from config import settings
+from utils.context_loader import build_context_injection
 
 logger = logging.getLogger("athena.jobs.morning")
 
@@ -23,9 +24,15 @@ def get_workspace_agenda_prompt():
     Generate the Workspace & Agenda session prompt.
     Task-focused approach that doesn't trigger identity rejection.
     Includes active rules from the learning system.
+    Now includes GitHub-based context injection for fast, cacheable access.
     """
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz)
+    
+    # Load context from GitHub (fast, cacheable)
+    logger.info("Loading context from GitHub repository")
+    github_context = build_context_injection()
+    logger.info(f"Loaded {len(github_context)} chars of context from GitHub")
     
     prompt = f"""# Daily Workspace & Agenda Session for Bradley Hope
 
@@ -207,6 +214,14 @@ Body: {{"feedback_type": "correction", "original_content": "...", "correction": 
 - The Brain API at athena-server-0dce.onrender.com stores observations, patterns, and learnings
 - All VIP contacts require explicit approval before any outreach
 - Learnings submitted are reviewed by Bradley before becoming active rules
+
+## BRADLEY'S CONTEXT (From GitHub Repository)
+
+The following context is loaded from the cogos-system GitHub repository and contains Bradley's voice guide, canonical memory, preferences, policies, and key workflows. This context is authoritative and MUST be followed in all interactions.
+
+{github_context}
+
+---
 
 Begin by executing Steps 1-7 to present the morning brief.
 """
