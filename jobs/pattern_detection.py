@@ -29,7 +29,7 @@ def analyze_observations_for_patterns(client: Anthropic, observations: List[Dict
     for obs in observations:
         obs_summaries.append({
             'id': str(obs['id']),
-            'source': obs['source'],
+            'source': obs['source_type'],
             'category': obs['category'],
             'priority': obs['priority'],
             'summary': obs['summary'],

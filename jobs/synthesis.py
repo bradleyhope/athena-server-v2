@@ -48,7 +48,7 @@ def generate_synthesis(
     obs_summary = []
     for obs in observations[:50]:  # Limit to recent 50
         obs_summary.append({
-            'source': obs['source'],
+            'source': obs['source_type'],
             'category': obs['category'],
             'priority': obs['priority'],
             'summary': obs['summary']
