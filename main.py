@@ -61,6 +61,7 @@ from api.evolution_routes import router as evolution_router
 from jobs.workflow_executor import workflow_router
 from api.learning_routes import router as learning_router
 from api.learning_api import router as passive_learning_router
+from api.webhooks import router as webhook_router
 
 # Configure logging
 logging.basicConfig(
@@ -296,6 +297,7 @@ app.include_router(evolution_router, dependencies=[Depends(verify_api_key)])  # 
 app.include_router(workflow_router, dependencies=[Depends(verify_api_key)])  # v1 prefix in router
 app.include_router(learning_router, dependencies=[Depends(verify_api_key)])  # v1 prefix in router
 app.include_router(passive_learning_router, dependencies=[Depends(verify_api_key)])  # /api/learn endpoints
+app.include_router(webhook_router)  # No auth required for GitHub webhooks (signature verification instead)
 
 
 if __name__ == "__main__":
