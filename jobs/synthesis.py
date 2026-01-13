@@ -128,24 +128,51 @@ Respond in JSON format:
 }}"""
 
     try:
+        logger.info(f"Calling Anthropic API with model: {settings.TIER3_MODEL}")
+        logger.info(f"Prompt length: {len(prompt)} characters")
+        
         response = client.messages.create(
             model=settings.TIER3_MODEL,
             max_tokens=3000,
             messages=[{"role": "user", "content": prompt}]
         )
         
+        logger.info(f"Received response from Anthropic API")
+        logger.info(f"Response type: {type(response.content[0])}")
+        
         content = response.content[0].text
+        logger.info(f"Response content length: {len(content)} characters")
+        logger.info(f"Response preview: {content[:200]}...")
         
         # Extract JSON
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0]
+            logger.info("Extracted JSON from markdown code block")
         elif "```" in content:
             content = content.split("```")[1].split("```")[0]
+            logger.info("Extracted content from generic code block")
         
-        return json.loads(content)
+        logger.info("Parsing JSON response...")
+        parsed_result = json.loads(content)
+        logger.info(f"Successfully parsed JSON with keys: {list(parsed_result.keys())}")
         
+        return parsed_result
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing failed: {e}")
+        logger.error(f"Content that failed to parse: {content[:500]}")
+        return {
+            "executive_summary": f"Synthesis generation failed: JSON parsing error - {str(e)}",
+            "key_insights": [],
+            "questions_for_user": [],
+            "memory_proposals": [],
+            "action_recommendations": []
+        }
     except Exception as e:
         logger.error(f"Synthesis generation failed: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return {
             "executive_summary": f"Synthesis generation failed: {str(e)}",
             "key_insights": [],
@@ -211,10 +238,19 @@ async def run_synthesis():
     }
     
     try:
+        logger.info(f"Attempting to store synthesis #{synthesis_number}")
+        logger.info(f"Synthesis data keys: {list(synthesis_data.keys())}")
+        logger.info(f"Executive summary length: {len(synthesis_data['executive_summary'])} chars")
+        
         synthesis_id = store_synthesis(synthesis_data)
-        logger.info(f"Stored synthesis #{synthesis_number} with ID {synthesis_id}")
+        
+        logger.info(f"✅ Successfully stored synthesis #{synthesis_number} with ID {synthesis_id}")
+        logger.info(f"Synthesis contains {len(synthesis_result['key_insights'])} insights, {len(synthesis_result['questions_for_user'])} questions, {len(synthesis_result['memory_proposals'])} memory proposals")
     except Exception as e:
-        logger.error(f"Failed to store synthesis: {e}")
+        logger.error(f"❌ Failed to store synthesis: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return {"status": "error", "error": str(e)}
     
     duration = (datetime.utcnow() - start_time).total_seconds()

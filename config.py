@@ -67,6 +67,10 @@ class Settings:
     # Budget
     MONTHLY_AI_BUDGET: int = int(os.getenv("MONTHLY_AI_BUDGET", "500"))
     
+    # Monitoring
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
+    
     def __post_init__(self):
         if self.ALLOWED_ORIGINS is None:
             origins = os.getenv("ALLOWED_ORIGINS", "*")

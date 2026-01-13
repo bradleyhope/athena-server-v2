@@ -532,3 +532,89 @@ async def get_brief_for_session(session_type: str):
     """
     brief = get_session_brief(session_type)
     return brief
+
+
+# =============================================================================
+# MEMORY APPROVAL ENDPOINT
+# =============================================================================
+
+class MemoryApprovalRequest(BaseModel):
+    """Request model for approving a memory proposal."""
+    memory_id: str = Field(..., description="ID of the memory proposal to approve")
+    approved_by: Optional[str] = Field(None, description="Who approved this memory (e.g., 'Bradley', 'Athena')")
+    notes: Optional[str] = Field(None, description="Optional notes about the approval")
+
+
+@router.post("/memory/approve")
+@handle_api_errors("approve memory proposal")
+async def approve_memory_proposal_endpoint(request: MemoryApprovalRequest):
+    """
+    Approve a memory proposal from synthesis.
+    Moves it from proposals to canonical_memory.
+    
+    This endpoint is part of the evolution system, allowing memory proposals
+    generated during synthesis to be approved and added to canonical memory.
+    """
+    from db.neon import db_cursor
+    
+    logger.info(f"Approving memory proposal: {request.memory_id}")
+    
+    try:
+        with db_cursor() as cursor:
+            # Check if the memory proposal exists
+            cursor.execute("""
+                SELECT * FROM memory_proposals
+                WHERE id = %s AND status = 'pending'
+            """, (request.memory_id,))
+            
+            proposal = cursor.fetchone()
+            
+            if not proposal:
+                raise NotFoundError(f"Memory proposal {request.memory_id} not found or already processed")
+            
+            # Move to canonical_memory
+            cursor.execute("""
+                INSERT INTO canonical_memory (
+                    category, subcategory, key, value, source, confidence,
+                    last_verified, created_at, updated_at
+                )
+                VALUES (
+                    %(category)s, %(subcategory)s, %(key)s, %(value)s, %(source)s, %(confidence)s,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                RETURNING id
+            """, {
+                'category': proposal['category'],
+                'subcategory': proposal.get('subcategory'),
+                'key': proposal['key'],
+                'value': proposal['value'],
+                'source': proposal.get('source', 'synthesis'),
+                'confidence': proposal.get('confidence', 0.8)
+            })
+            
+            canonical_id = cursor.fetchone()['id']
+            
+            # Update proposal status
+            cursor.execute("""
+                UPDATE memory_proposals
+                SET status = 'approved',
+                    approved_at = CURRENT_TIMESTAMP,
+                    approved_by = %s,
+                    notes = %s
+                WHERE id = %s
+            """, (request.approved_by or 'system', request.notes, request.memory_id))
+            
+            logger.info(f"✅ Memory proposal {request.memory_id} approved and moved to canonical_memory as {canonical_id}")
+            
+            return {
+                "status": "approved",
+                "memory_id": request.memory_id,
+                "canonical_id": str(canonical_id),
+                "message": "Memory proposal approved and added to canonical memory"
+            }
+            
+    except NotFoundError:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to approve memory proposal: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to approve memory: {str(e)}")

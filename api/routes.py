@@ -941,3 +941,13 @@ async def get_broadcast_stats():
     except Exception as e:
         logger.error(f"Failed to get broadcast stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sentry-test")
+async def test_sentry():
+    """
+    Test Sentry error tracking integration.
+    This endpoint intentionally raises an exception to verify Sentry is capturing errors.
+    """
+    logger.info("Sentry test endpoint called - intentionally raising exception")
+    raise Exception("Test Sentry integration - this is an intentional error for monitoring verification")

@@ -36,6 +36,21 @@ from apscheduler.triggers.cron import CronTrigger
 
 from config import settings
 from db.neon import get_db_connection, check_db_health
+
+# Initialize Sentry for error monitoring
+try:
+    import sentry_sdk
+    if settings.SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            environment=settings.ENVIRONMENT,
+            traces_sample_rate=1.0,
+        )
+        early_logger.info(f"Sentry initialized for environment: {settings.ENVIRONMENT}")
+    else:
+        early_logger.info("Sentry DSN not configured, skipping initialization")
+except ImportError:
+    early_logger.warning("sentry-sdk not installed, error monitoring disabled")
 from api.routes import router as api_router
 from api.brain_routes import router as brain_router
 from api.session_init import router as session_router

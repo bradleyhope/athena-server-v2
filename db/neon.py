@@ -244,14 +244,29 @@ def store_pattern(pattern: dict) -> str:
     Schema: pattern_type, pattern_name, description, confidence, evidence,
             observation_ids, status, detected_at
     """
+    from datetime import datetime
+    
+    # Calculate evidence_count from observation_ids
+    observation_ids = pattern.get('observation_ids', [])
+    evidence_count = len(observation_ids) if observation_ids else 0
+    
+    # Auto-generate pattern_name if not provided
+    if not pattern.get('pattern_name'):
+        pattern_type = pattern.get('pattern_type', 'unknown')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        pattern['pattern_name'] = f"{pattern_type}_{timestamp}"
+    
+    # Add evidence_count to pattern dict
+    pattern['evidence_count'] = evidence_count
+    
     with db_cursor() as cursor:
         cursor.execute("""
             INSERT INTO patterns (
                 pattern_type, pattern_name, description, confidence, 
-                observation_ids, detected_at, evidence
+                observation_ids, detected_at, evidence, evidence_count
             ) VALUES (
                 %(pattern_type)s, %(pattern_name)s, %(description)s, %(confidence)s,
-                %(observation_ids)s::uuid[], %(detected_at)s, %(evidence)s
+                %(observation_ids)s::uuid[], %(detected_at)s, %(evidence)s, %(evidence_count)s
             )
             RETURNING id
         """, pattern)
