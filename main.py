@@ -45,6 +45,7 @@ try:
             dsn=settings.SENTRY_DSN,
             environment=settings.ENVIRONMENT,
             traces_sample_rate=1.0,
+            send_default_pii=True,  # Include request headers and IP for better debugging
         )
         early_logger.info(f"Sentry initialized for environment: {settings.ENVIRONMENT}")
     else:

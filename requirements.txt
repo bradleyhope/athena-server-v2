@@ -27,7 +27,7 @@ python-dotenv==1.0.1
 pytz==2024.1
 
 # Monitoring
-sentry-sdk==2.18.0
+sentry-sdk[fastapi]==2.18.0
 
 # Testing
 pytest==8.3.4
