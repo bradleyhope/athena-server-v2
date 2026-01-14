@@ -58,6 +58,8 @@ from db.brain.evolution import (
     record_feedback,
     get_unprocessed_feedback,
     mark_feedback_processed,
+    get_learning_analytics,
+    get_learning_insights,
 )
 
 # Status
@@ -144,6 +146,8 @@ __all__ = [
     "record_feedback",
     "get_unprocessed_feedback",
     "mark_feedback_processed",
+    "get_learning_analytics",
+    "get_learning_insights",
     # Status
     "get_brain_status",
     "update_brain_status",

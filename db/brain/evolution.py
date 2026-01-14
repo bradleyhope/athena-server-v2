@@ -76,6 +76,184 @@ def apply_evolution(evolution_id: str) -> bool:
 
 
 # =============================================================================
+# LEARNING ANALYTICS
+# =============================================================================
+
+def get_learning_analytics() -> Dict[str, Any]:
+    """
+    Get comprehensive learning analytics for the evolution system.
+    
+    Returns:
+        Dictionary with analytics data including:
+        - Proposal counts by status, category, and type
+        - Approval rates
+        - Trends over time
+        - Most common categories
+    """
+    analytics = {
+        "summary": {
+            "total_proposals": 0,
+            "approved": 0,
+            "rejected": 0,
+            "pending": 0,
+            "applied": 0,
+            "approval_rate": 0.0
+        },
+        "by_category": {},
+        "by_type": {},
+        "by_source": {},
+        "trends": {
+            "last_7_days": 0,
+            "last_30_days": 0,
+            "approvals_last_7_days": 0
+        },
+        "top_categories": [],
+        "recent_activity": []
+    }
+    
+    try:
+        with db_cursor() as cursor:
+            # Summary counts by status
+            cursor.execute("""
+                SELECT status, COUNT(*) as count 
+                FROM evolution_log 
+                GROUP BY status
+            """)
+            for row in cursor.fetchall():
+                status = row['status']
+                count = row['count']
+                analytics["summary"]["total_proposals"] += count
+                if status == 'proposed':
+                    analytics["summary"]["pending"] = count
+                elif status == 'approved':
+                    analytics["summary"]["approved"] = count
+                elif status == 'rejected':
+                    analytics["summary"]["rejected"] = count
+                elif status == 'applied':
+                    analytics["summary"]["applied"] = count
+            
+            # Calculate approval rate
+            total_decided = analytics["summary"]["approved"] + analytics["summary"]["rejected"] + analytics["summary"]["applied"]
+            if total_decided > 0:
+                approved_total = analytics["summary"]["approved"] + analytics["summary"]["applied"]
+                analytics["summary"]["approval_rate"] = approved_total / total_decided
+            
+            # Counts by category
+            cursor.execute("""
+                SELECT category, COUNT(*) as count 
+                FROM evolution_log 
+                GROUP BY category 
+                ORDER BY count DESC
+            """)
+            for row in cursor.fetchall():
+                analytics["by_category"][row['category']] = row['count']
+            
+            # Counts by evolution type
+            cursor.execute("""
+                SELECT evolution_type, COUNT(*) as count 
+                FROM evolution_log 
+                GROUP BY evolution_type 
+                ORDER BY count DESC
+            """)
+            for row in cursor.fetchall():
+                analytics["by_type"][row['evolution_type']] = row['count']
+            
+            # Counts by source
+            cursor.execute("""
+                SELECT source, COUNT(*) as count 
+                FROM evolution_log 
+                GROUP BY source 
+                ORDER BY count DESC
+            """)
+            for row in cursor.fetchall():
+                analytics["by_source"][row['source']] = row['count']
+            
+            # Trends - last 7 days
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM evolution_log 
+                WHERE created_at > NOW() - INTERVAL '7 days'
+            """)
+            analytics["trends"]["last_7_days"] = cursor.fetchone()['count']
+            
+            # Trends - last 30 days
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM evolution_log 
+                WHERE created_at > NOW() - INTERVAL '30 days'
+            """)
+            analytics["trends"]["last_30_days"] = cursor.fetchone()['count']
+            
+            # Approvals in last 7 days
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM evolution_log 
+                WHERE approved_at > NOW() - INTERVAL '7 days'
+            """)
+            analytics["trends"]["approvals_last_7_days"] = cursor.fetchone()['count']
+            
+            # Top 5 categories
+            analytics["top_categories"] = list(analytics["by_category"].keys())[:5]
+            
+            # Recent activity (last 10 proposals)
+            cursor.execute("""
+                SELECT id, evolution_type, category, description, status, created_at
+                FROM evolution_log
+                ORDER BY created_at DESC
+                LIMIT 10
+            """)
+            analytics["recent_activity"] = cursor.fetchall()
+            
+    except Exception as e:
+        logger.error(f"Failed to get learning analytics: {e}")
+    
+    return analytics
+
+
+def get_learning_insights() -> List[str]:
+    """
+    Generate human-readable insights from learning analytics.
+    
+    Returns:
+        List of insight strings
+    """
+    analytics = get_learning_analytics()
+    insights = []
+    
+    # Approval rate insight
+    approval_rate = analytics["summary"]["approval_rate"]
+    if approval_rate > 0.8:
+        insights.append(f"High approval rate ({approval_rate:.0%}) - proposals are well-aligned with Bradley's preferences.")
+    elif approval_rate < 0.5 and analytics["summary"]["total_proposals"] > 5:
+        insights.append(f"Low approval rate ({approval_rate:.0%}) - consider reviewing proposal quality criteria.")
+    
+    # Pending proposals insight
+    pending = analytics["summary"]["pending"]
+    if pending > 10:
+        insights.append(f"{pending} proposals pending review - consider scheduling time for approvals.")
+    elif pending > 0:
+        insights.append(f"{pending} proposal(s) awaiting Bradley's review.")
+    
+    # Top category insight
+    if analytics["top_categories"]:
+        top_cat = analytics["top_categories"][0]
+        top_count = analytics["by_category"].get(top_cat, 0)
+        insights.append(f"Most common learning category: {top_cat} ({top_count} proposals).")
+    
+    # Trend insight
+    last_7 = analytics["trends"]["last_7_days"]
+    last_30 = analytics["trends"]["last_30_days"]
+    if last_30 > 0:
+        weekly_avg = last_30 / 4
+        if last_7 > weekly_avg * 1.5:
+            insights.append(f"Learning activity is up! {last_7} proposals in the last 7 days vs {weekly_avg:.0f} weekly average.")
+        elif last_7 < weekly_avg * 0.5 and weekly_avg > 2:
+            insights.append(f"Learning activity is down. Only {last_7} proposals in the last 7 days.")
+    
+    return insights
+
+
+# =============================================================================
 # PERFORMANCE METRICS
 # =============================================================================
 

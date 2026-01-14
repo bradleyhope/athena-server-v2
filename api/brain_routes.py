@@ -46,6 +46,8 @@ from db.brain import (
     record_feedback,
     get_unprocessed_feedback,
     mark_feedback_processed,
+    get_learning_analytics,
+    get_learning_insights,
     # Status
     get_brain_status,
     update_brain_status,
@@ -482,6 +484,38 @@ async def mark_feedback_as_processed(feedback_id: str, evolution_id: Optional[st
     if not success:
         raise NotFoundError("Feedback not found")
     return {"status": "processed", "id": feedback_id}
+
+
+# =============================================================================
+# LEARNING ANALYTICS ENDPOINTS
+# =============================================================================
+
+@router.get("/analytics")
+@handle_api_errors("get learning analytics")
+async def get_analytics():
+    """
+    Get comprehensive learning analytics.
+    
+    Returns analytics including:
+    - Proposal counts by status, category, and type
+    - Approval rates
+    - Trends over time
+    - Most common categories
+    """
+    analytics = get_learning_analytics()
+    return analytics
+
+
+@router.get("/analytics/insights")
+@handle_api_errors("get learning insights")
+async def get_insights():
+    """
+    Get human-readable insights from learning analytics.
+    
+    Returns a list of insight strings based on current analytics data.
+    """
+    insights = get_learning_insights()
+    return {"count": len(insights), "insights": insights}
 
 
 # =============================================================================
