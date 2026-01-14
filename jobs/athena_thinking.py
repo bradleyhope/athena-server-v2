@@ -68,16 +68,16 @@ def get_system_metrics() -> Dict[str, Any]:
             """)
             metrics["patterns"]["high_confidence"] = cursor.fetchone()["count"]
             
-            # Evolution proposals
+            # Evolution proposals (from evolution_log table)
             cursor.execute("""
-                SELECT status, COUNT(*) as count FROM evolution_proposals 
+                SELECT status, COUNT(*) as count FROM evolution_log 
                 GROUP BY status
             """)
             for row in cursor.fetchall():
-                if row["status"] == "pending":
+                if row["status"] == "proposed":
                     metrics["evolution_proposals"]["pending"] = row["count"]
-                elif row["status"] == "approved":
-                    metrics["evolution_proposals"]["approved"] = row["count"]
+                elif row["status"] == "approved" or row["status"] == "applied":
+                    metrics["evolution_proposals"]["approved"] = metrics["evolution_proposals"].get("approved", 0) + row["count"]
                 elif row["status"] == "rejected":
                     metrics["evolution_proposals"]["rejected"] = row["count"]
             
@@ -114,10 +114,11 @@ def get_recent_learnings() -> Dict[str, Any]:
     
     try:
         with db_cursor() as cursor:
-            # Recent evolution proposals
+            # Recent evolution proposals (from evolution_log table)
             cursor.execute("""
-                SELECT id, proposal_type, description, rationale, status, created_at
-                FROM evolution_proposals
+                SELECT id, evolution_type as proposal_type, description, 
+                       change_data as rationale, status, created_at
+                FROM evolution_log
                 ORDER BY created_at DESC
                 LIMIT 10
             """)
@@ -125,18 +126,20 @@ def get_recent_learnings() -> Dict[str, Any]:
             
             # Rejected proposals (to learn from)
             cursor.execute("""
-                SELECT id, proposal_type, description, rationale, rejection_reason, created_at
-                FROM evolution_proposals
+                SELECT id, evolution_type as proposal_type, description, 
+                       change_data as rationale, approved_by as rejection_reason, created_at
+                FROM evolution_log
                 WHERE status = 'rejected'
                 ORDER BY created_at DESC
                 LIMIT 5
             """)
             learnings["rejected_proposals"] = cursor.fetchall()
             
-            # Recent feedback
+            # Recent feedback (from feedback_history table)
             cursor.execute("""
-                SELECT id, feedback_type, original_content, correction, severity, created_at
-                FROM feedback
+                SELECT id, feedback_type, target_type as original_content, 
+                       feedback_data::text as correction, sentiment as severity, created_at
+                FROM feedback_history
                 ORDER BY created_at DESC
                 LIMIT 10
             """)

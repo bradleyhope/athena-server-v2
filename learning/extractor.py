@@ -321,17 +321,18 @@ async def learn_from_bad_task(task_title: str, reason: str = "") -> Dict[str, An
         "proposed_boundary": f"Do not create tasks like: {task_title}"
     }
 
-    # Store as pending boundary proposal
+    # Store as pending boundary proposal in evolution_log
+    import json as json_module
     with db_cursor() as cursor:
         cursor.execute("""
-            INSERT INTO evolution_proposals (
-                proposal_type, category, description, reasoning, status, confidence
+            INSERT INTO evolution_log (
+                evolution_type, category, description, change_data, source, confidence, status
             ) VALUES (
-                'boundary', 'task_creation', %s, %s, 'pending', 0.7
+                'boundary_adjusted', 'task_creation', %s, %s, 'feedback', 0.7, 'proposed'
             )
         """, (
             f"Avoid creating tasks like: {task_title}",
-            f"Task was marked as bad. Reason: {reason or 'Not specified'}"
+            json_module.dumps({"rule": f"Do not create tasks like: {task_title}", "reason": reason or 'Not specified'})
         ))
 
     logger.info(f"Learned from bad task: {task_title}")
@@ -352,18 +353,19 @@ async def store_task_learnings(learnings: Dict[str, Any]) -> None:
                 source="task_completion"
             )
 
-    # Store workflow suggestion if any
+    # Store workflow suggestion if any in evolution_log
     if learnings.get("should_create_workflow") and learnings.get("workflow_suggestion"):
+        import json as json_module
         with db_cursor() as cursor:
             cursor.execute("""
-                INSERT INTO evolution_proposals (
-                    proposal_type, category, description, reasoning, status, confidence
+                INSERT INTO evolution_log (
+                    evolution_type, category, description, change_data, source, confidence, status
                 ) VALUES (
-                    'workflow', 'task_patterns', %s, %s, 'pending', 0.6
+                    'workflow_update', 'task_patterns', %s, %s, 'observation', 0.6, 'proposed'
                 )
             """, (
                 learnings.get("workflow_suggestion"),
-                f"Extracted from task: {learnings.get('task_title')}"
+                json_module.dumps({"task_title": learnings.get('task_title'), "suggestion": learnings.get('workflow_suggestion')})
             ))
 
 
