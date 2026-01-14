@@ -198,6 +198,72 @@ def format_metrics_for_prompt(metrics: Dict) -> str:
     return "\n".join(lines)
 
 
+def get_pending_proposals_for_review() -> List[Dict]:
+    """
+    Get pending evolution proposals with full details for Bradley to review.
+    """
+    proposals = []
+    try:
+        with db_cursor() as cursor:
+            cursor.execute("""
+                SELECT id, evolution_type, category, description, 
+                       change_data, source, confidence, created_at
+                FROM evolution_log
+                WHERE status = 'proposed'
+                ORDER BY confidence DESC, created_at DESC
+                LIMIT 10
+            """)
+            proposals = cursor.fetchall()
+    except Exception as e:
+        logger.error(f"Failed to get pending proposals: {e}")
+    return proposals
+
+
+def format_proposals_for_review(proposals: List[Dict]) -> str:
+    """
+    Format pending proposals into a review section for Bradley.
+    """
+    if not proposals:
+        return "No pending proposals to review."
+    
+    lines = []
+    for i, p in enumerate(proposals, 1):
+        proposal_id = p.get('id', 'unknown')
+        evolution_type = p.get('evolution_type', 'unknown')
+        category = p.get('category', 'unknown')
+        description = p.get('description', '')
+        change_data = p.get('change_data', {})
+        confidence = p.get('confidence', 0)
+        created_at = p.get('created_at', '')
+        
+        # Format change_data if it's a dict
+        if isinstance(change_data, dict):
+            change_str = json.dumps(change_data, indent=2)
+        else:
+            change_str = str(change_data)
+        
+        lines.append(f"### Proposal {i}: {evolution_type.upper()} - {category}")
+        lines.append(f"**ID:** `{proposal_id}`")
+        lines.append(f"**Confidence:** {confidence:.0%}")
+        lines.append(f"**Created:** {created_at}")
+        lines.append(f"")
+        lines.append(f"**Description:**")
+        lines.append(f"> {description}")
+        lines.append(f"")
+        lines.append(f"**Change Data:**")
+        lines.append(f"```json")
+        lines.append(change_str)
+        lines.append(f"```")
+        lines.append(f"")
+        lines.append(f"**To approve:** Tell Bradley to approve proposal {proposal_id}")
+        lines.append(f"**To reject:** Tell Bradley to reject proposal {proposal_id}")
+        lines.append(f"")
+        lines.append("---")
+        lines.append("")
+    
+    return "\n".join(lines)
+
+
 def format_learnings_for_prompt(learnings: Dict) -> str:
     """Format learnings into a readable string for the prompt."""
     lines = []
@@ -259,6 +325,10 @@ def get_thinking_prompt() -> str:
     # Collect system metrics
     metrics = get_system_metrics()
     learnings = get_recent_learnings()
+    
+    # Get pending proposals for Bradley to review
+    pending_proposals_list = get_pending_proposals_for_review()
+    proposals_for_review_str = format_proposals_for_review(pending_proposals_list)
 
     # Get brain context
     try:
@@ -280,6 +350,7 @@ def get_thinking_prompt() -> str:
     total_patterns = metrics["patterns"]["total"]
     pending_proposals = metrics["evolution_proposals"]["pending"]
     rejected_count = metrics["evolution_proposals"]["rejected"]
+    pending_count = len(pending_proposals_list)
 
     return f"""# ATHENA THINKING - Deep Introspection Session
 **Date:** {today}
@@ -307,6 +378,22 @@ Think of this as your time for:
 ## LEARNING HISTORY
 
 {learnings_str}
+
+---
+
+## 🔔 PENDING PROPOSALS FOR BRADLEY'S REVIEW
+
+**{pending_count} proposals awaiting approval.**
+
+Bradley, please review these proposals and tell me which to approve or reject:
+
+{proposals_for_review_str}
+
+**How to respond:**
+- Say "Approve proposal [ID]" to approve
+- Say "Reject proposal [ID] because [reason]" to reject
+- Say "Approve all" to approve all pending proposals
+- Say "Skip proposals" to review later
 
 ---
 
@@ -410,6 +497,37 @@ This creates evolution proposals for each learning that Bradley can approve.
 
 ---
 
+## PROPOSAL APPROVAL WORKFLOW
+
+When Bradley approves or rejects proposals, execute the appropriate API call:
+
+**To approve a proposal:**
+```
+POST https://athena-server-v2.onrender.com/api/brain/evolution/[ID]/approve?approved_by=bradley
+Authorization: Bearer athena_api_key_2024
+```
+
+**To apply an approved proposal (makes it active):**
+```
+POST https://athena-server-v2.onrender.com/api/brain/evolution/[ID]/apply
+Authorization: Bearer athena_api_key_2024
+```
+
+**To reject a proposal:**
+```
+POST https://athena-server-v2.onrender.com/api/brain/evolution/[ID]/reject
+Authorization: Bearer athena_api_key_2024
+Content-Type: application/json
+
+{{
+  "reason": "Bradley's rejection reason"
+}}
+```
+
+**After approval:** Always call `/apply` after `/approve` to activate the rule.
+
+---
+
 ## IMPORTANT NOTES
 
 - This session is about **Athena's systems**, not Bradley's tasks
@@ -418,8 +536,9 @@ This creates evolution proposals for each learning that Bradley can approve.
 - Be specific and actionable in your proposals
 - Learn from rejected proposals - don't propose the same things again
 - **ALWAYS submit a session report at the end**
+- **ALWAYS process Bradley's proposal approvals/rejections before ending**
 
-**Begin your analysis. Start with the Pipeline Health Check.**
+**Begin your analysis. Start with the Pending Proposals Review if any exist, then Pipeline Health Check.**
 """
 
 
