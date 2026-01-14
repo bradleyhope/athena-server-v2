@@ -20,8 +20,9 @@ from config import settings, MANUS_CONNECTORS
 from db.neon import db_cursor, get_active_session, store_broadcast, ensure_broadcasts_table
 from db.brain import (
     get_brain_status, get_continuous_state_context,
-    get_recent_observations, get_recent_patterns
+    get_recent_patterns
 )
+from db.brain.composite import get_recent_observations
 from integrations.manus_api import create_manus_task
 
 logger = logging.getLogger("athena.jobs.hourly_broadcast")
@@ -56,8 +57,15 @@ async def generate_thought_burst() -> Dict[str, Any]:
         brain_status = {}
         continuous_state = {}
     
-    # Get recent observations (last hour)
-    recent_observations = continuous_state.get("recent_observations", [])[:5]
+    # Get recent observations from the LAST HOUR specifically for broadcast accuracy
+    # This fixes the "0 observations" bug where we were using all-time recent obs
+    try:
+        recent_observations = get_recent_observations(limit=10, hours=1)
+    except Exception as e:
+        logger.error(f"Failed to get hourly observations: {e}")
+        recent_observations = []
+    
+    # Get patterns and pending actions from continuous state
     recent_patterns = continuous_state.get("recent_patterns", [])[:3]
     pending_actions = continuous_state.get("pending_actions", [])[:3]
     
@@ -130,7 +138,13 @@ async def generate_thought_burst() -> Dict[str, Any]:
     elif thought_type == "Insight":
         title = f"💡 New pattern detected: {recent_patterns[0].get('type', 'unknown') if recent_patterns else 'unknown'}"
     else:
-        title = f"🧠 {time_context}: {len(recent_observations)} observations"
+        obs_count = len(recent_observations)
+        if obs_count == 0:
+            title = f"🧠 {time_context}: No new observations in the last hour"
+        elif obs_count == 1:
+            title = f"🧠 {time_context}: 1 new observation"
+        else:
+            title = f"🧠 {time_context}: {obs_count} new observations"
     
     return {
         "title": title,

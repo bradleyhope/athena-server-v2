@@ -214,20 +214,43 @@ def get_recent_sessions(days: int = 7) -> List[Dict]:
         ]
 
 
-def get_recent_observations(limit: int = 10) -> List[Dict]:
-    """Get recent observations for context."""
+def get_recent_observations(limit: int = 10, hours: int = None) -> List[Dict]:
+    """
+    Get recent observations for context.
+    
+    Args:
+        limit: Maximum number of observations to return
+        hours: If specified, only return observations from the last N hours
+    
+    Returns:
+        List of observation dictionaries
+    """
     with db_cursor() as cursor:
-        cursor.execute("""
-            SELECT
-                category,
-                COALESCE(summary, title) AS content,
-                source_type AS source,
-                1.0 AS confidence,
-                observed_at AS created_at
-            FROM observations
-            ORDER BY observed_at DESC
-            LIMIT %s
-        """, (limit,))
+        if hours:
+            cursor.execute("""
+                SELECT
+                    category,
+                    COALESCE(summary, title) AS content,
+                    source_type AS source,
+                    1.0 AS confidence,
+                    observed_at AS created_at
+                FROM observations
+                WHERE observed_at > NOW() - INTERVAL '%s hours'
+                ORDER BY observed_at DESC
+                LIMIT %s
+            """, (hours, limit))
+        else:
+            cursor.execute("""
+                SELECT
+                    category,
+                    COALESCE(summary, title) AS content,
+                    source_type AS source,
+                    1.0 AS confidence,
+                    observed_at AS created_at
+                FROM observations
+                ORDER BY observed_at DESC
+                LIMIT %s
+            """, (limit,))
         return [
             {
                 "category": row['category'],
