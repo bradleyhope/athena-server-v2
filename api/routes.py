@@ -822,11 +822,11 @@ async def send_message_to_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/broadcasts/recent")
-async def get_recent_broadcasts():
+@router.get("/broadcasts/notion")
+async def get_notion_broadcasts():
     """
     Get recent broadcasts from the Athena Broadcasts Notion database.
-    This is a convenience endpoint for checking what's been broadcast.
+    This is a legacy endpoint - prefer /broadcasts/recent for database broadcasts.
     """
     import httpx
     

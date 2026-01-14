@@ -718,3 +718,66 @@ async def approve_memory_proposal_endpoint(request: MemoryApprovalRequest):
     except Exception as e:
         logger.error(f"Failed to approve memory proposal: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to approve memory: {str(e)}")
+
+
+# =============================================================================
+# DATA QUERY ENDPOINTS
+# =============================================================================
+
+@router.get("/observations")
+@handle_api_errors("get observations")
+async def get_observations(limit: int = 50, hours: int = None):
+    """
+    Get recent observations from the brain.
+    
+    Args:
+        limit: Maximum number of observations to return (default 50)
+        hours: If specified, only return observations from the last N hours
+    """
+    from db.brain.composite import get_recent_observations
+    
+    observations = get_recent_observations(limit=limit, hours=hours)
+    return {
+        "count": len(observations),
+        "limit": limit,
+        "hours": hours,
+        "observations": observations
+    }
+
+
+@router.get("/patterns")
+@handle_api_errors("get patterns")
+async def get_patterns(limit: int = 20):
+    """
+    Get detected patterns from the brain.
+    
+    Args:
+        limit: Maximum number of patterns to return (default 20)
+    """
+    from db.brain.composite import get_recent_patterns
+    
+    patterns = get_recent_patterns(limit=limit)
+    return {
+        "count": len(patterns),
+        "limit": limit,
+        "patterns": patterns
+    }
+
+
+@router.get("/synthesis")
+@handle_api_errors("get synthesis")
+async def get_synthesis(limit: int = 10):
+    """
+    Get synthesis/conclusions from the brain.
+    
+    Args:
+        limit: Maximum number of synthesis records to return (default 10)
+    """
+    from db.brain.composite import get_recent_synthesis
+    
+    synthesis = get_recent_synthesis(limit=limit)
+    return {
+        "count": len(synthesis),
+        "limit": limit,
+        "synthesis": synthesis
+    }
