@@ -267,7 +267,9 @@ def get_recent_patterns(limit: int = 5) -> List[Dict]:
     """Get recent detected patterns."""
     with db_cursor() as cursor:
         cursor.execute("""
-            SELECT pattern_type, description, confidence, evidence_count, detected_at
+            SELECT pattern_type, pattern_name, description, confidence, 
+                   jsonb_array_length(COALESCE(evidence, '[]'::jsonb)) as evidence_count,
+                   detected_at
             FROM patterns
             ORDER BY detected_at DESC
             LIMIT %s
@@ -275,9 +277,10 @@ def get_recent_patterns(limit: int = 5) -> List[Dict]:
         return [
             {
                 "type": row['pattern_type'],
+                "name": row['pattern_name'],
                 "description": row['description'][:150] if row['description'] else None,
                 "confidence": row['confidence'],
-                "evidence_count": row['evidence_count'],
+                "evidence_count": row['evidence_count'] or 0,
                 "when": row['detected_at'].strftime("%Y-%m-%d") if row['detected_at'] else None
             }
             for row in cursor.fetchall()
@@ -288,17 +291,17 @@ def get_recent_synthesis(limit: int = 3) -> List[Dict]:
     """Get recent synthesis/conclusions."""
     with db_cursor() as cursor:
         cursor.execute("""
-            SELECT synthesis_date, executive_summary, key_insights, synthesis_number
+            SELECT created_at, executive_summary, key_insights, synthesis_number
             FROM synthesis_memory
             WHERE executive_summary IS NOT NULL
-            ORDER BY synthesis_date DESC
+            ORDER BY created_at DESC
             LIMIT %s
         """, (limit,))
         return [
             {
-                "date": row['synthesis_date'].strftime("%Y-%m-%d") if row['synthesis_date'] else None,
+                "date": row['created_at'].strftime("%Y-%m-%d") if row['created_at'] else None,
                 "summary": row['executive_summary'][:200] if row['executive_summary'] else None,
-                "insights": row['key_insights'][:200] if row['key_insights'] else None,
+                "insights": str(row['key_insights'])[:200] if row['key_insights'] else None,
                 "number": row['synthesis_number']
             }
             for row in cursor.fetchall()
