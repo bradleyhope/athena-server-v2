@@ -143,6 +143,89 @@ def load_all_workflows() -> Dict[str, str]:
     return workflows
 
 
+def load_active_rules_from_db() -> str:
+    """
+    Load active rules from the database (boundaries, preferences, canonical memory).
+    These are rules that have been approved through the evolution system.
+    
+    Returns:
+        Formatted markdown string with active rules from the database
+    """
+    try:
+        from db.neon import db_cursor
+        
+        sections = []
+        
+        with db_cursor() as cur:
+            # Get active boundaries from database
+            cur.execute("""
+                SELECT category, rule, description, boundary_type
+                FROM boundaries WHERE active = true
+                ORDER BY category, created_at DESC
+            """)
+            boundaries = cur.fetchall()
+            
+            if boundaries:
+                sections.append("### Active Boundaries (From Learning System)\n")
+                for b in boundaries:
+                    if hasattr(b, 'keys'):
+                        sections.append(f"- **[{b['category']}]** {b['rule']}")
+                        if b['description']:
+                            sections.append(f"  - {b['description']}")
+                    else:
+                        sections.append(f"- **[{b[0]}]** {b[1]}")
+                        if b[2]:
+                            sections.append(f"  - {b[2]}")
+                sections.append("\n")
+            
+            # Get preferences from database
+            cur.execute("""
+                SELECT category, key, value
+                FROM preferences
+                ORDER BY category, updated_at DESC
+            """)
+            preferences = cur.fetchall()
+            
+            if preferences:
+                sections.append("### Learned Preferences (From Learning System)\n")
+                for p in preferences:
+                    if hasattr(p, 'keys'):
+                        sections.append(f"- **{p['key']}**: {p['value']} (category: {p['category']})")
+                    else:
+                        sections.append(f"- **{p[1]}**: {p[2]} (category: {p[0]})")
+                sections.append("\n")
+            
+            # Get active canonical memory from database
+            cur.execute("""
+                SELECT category, key, value, description
+                FROM canonical_memory WHERE active = true
+                ORDER BY category, created_at DESC
+            """)
+            canonical = cur.fetchall()
+            
+            if canonical:
+                sections.append("### Canonical Facts (From Learning System)\n")
+                for c in canonical:
+                    if hasattr(c, 'keys'):
+                        sections.append(f"- **{c['key']}**: {c['value']}")
+                        if c['description']:
+                            sections.append(f"  - {c['description']}")
+                    else:
+                        sections.append(f"- **{c[1]}**: {c[2]}")
+                        if c[3]:
+                            sections.append(f"  - {c[3]}")
+                sections.append("\n")
+        
+        if sections:
+            return "\n".join(sections)
+        else:
+            return "<!-- No active rules in database yet -->\n"
+            
+    except Exception as e:
+        logger.error(f"Error loading active rules from database: {e}")
+        return f"<!-- Error loading active rules: {e} -->\n"
+
+
 def build_context_injection() -> str:
     """
     Build the complete context injection string for workspace sessions.
@@ -153,6 +236,7 @@ def build_context_injection() -> str:
     - VIP contacts
     - Preferences
     - Policies
+    - Active rules from database (learned through evolution system)
     - Key workflows
     
     Returns:
@@ -183,6 +267,12 @@ def build_context_injection() -> str:
     # Policies
     sections.append("## Policies & Boundaries (Hard Constraints)\n")
     sections.append(load_policies())
+    sections.append("\n---\n")
+    
+    # Active Rules from Database (Evolution System)
+    sections.append("## Active Rules (From Learning System)\n")
+    sections.append("These rules were learned from past sessions and approved by Bradley:\n\n")
+    sections.append(load_active_rules_from_db())
     sections.append("\n---\n")
     
     # Key Workflows
