@@ -380,6 +380,36 @@ By the end of this session, you should have:
 
 ---
 
+## SESSION REPORT SUBMISSION
+
+At the end of this session, submit a session report to capture learnings:
+
+```
+POST https://athena-server-v2.onrender.com/api/v1/learning/submit-report
+Authorization: Bearer athena_api_key_2024
+Content-Type: application/json
+
+{{
+  "session_date": "{today}",
+  "session_type": "athena_thinking",
+  "accomplishments": ["list of what was accomplished"],
+  "learnings": [
+    {{
+      "category": "architecture|task_creation|email|scheduling",
+      "rule": "The rule or learning",
+      "description": "Detailed explanation",
+      "target": "boundary|preference|canonical",
+      "severity": "low|medium|high"
+    }}
+  ],
+  "tips_for_tomorrow": ["tips for the next session"]
+}}
+```
+
+This creates evolution proposals for each learning that Bradley can approve.
+
+---
+
 ## IMPORTANT NOTES
 
 - This session is about **Athena's systems**, not Bradley's tasks
@@ -387,6 +417,7 @@ By the end of this session, you should have:
 - Focus on **meta-level improvements** to how Athena operates
 - Be specific and actionable in your proposals
 - Learn from rejected proposals - don't propose the same things again
+- **ALWAYS submit a session report at the end**
 
 **Begin your analysis. Start with the Pipeline Health Check.**
 """

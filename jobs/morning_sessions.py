@@ -159,7 +159,31 @@ If you identify issues or improvements needed:
    - Database: `{settings.SESSION_ARCHIVE_DB_ID}`
    - Include: tasks completed, decisions made, items deferred
 
-2. Submit any learnings from the session using the learning endpoint above
+2. Submit a session report to capture learnings:
+
+```
+POST https://athena-server-v2.onrender.com/api/v1/learning/submit-report
+Authorization: Bearer athena_api_key_2024
+Content-Type: application/json
+
+{{
+  "session_date": "{now.strftime('%Y-%m-%d')}",
+  "session_type": "workspace_agenda",
+  "accomplishments": ["list of tasks completed today"],
+  "learnings": [
+    {{
+      "category": "task_creation|email|scheduling|communication",
+      "rule": "The rule or learning discovered",
+      "description": "Detailed explanation of why this matters",
+      "target": "boundary|preference|canonical",
+      "severity": "low|medium|high"
+    }}
+  ],
+  "tips_for_tomorrow": ["things to remember for the next session"]
+}}
+```
+
+This creates evolution proposals for each learning that Bradley can approve.
 
 ## KEY CONTEXT
 
