@@ -143,6 +143,54 @@ def load_all_workflows() -> Dict[str, str]:
     return workflows
 
 
+def cleanup_expired_rules() -> Dict[str, int]:
+    """
+    Clean up expired rules from the database.
+    Marks expired rules as inactive rather than deleting them.
+    
+    Returns:
+        Dictionary with counts of expired rules by table
+    """
+    counts = {"boundaries": 0, "preferences": 0, "canonical_memory": 0}
+    
+    try:
+        from db.neon import db_cursor
+        
+        with db_cursor() as cur:
+            # Deactivate expired boundaries
+            cur.execute("""
+                UPDATE boundaries 
+                SET active = false, updated_at = NOW()
+                WHERE active = true 
+                AND expires_at IS NOT NULL 
+                AND expires_at <= NOW()
+            """)
+            counts["boundaries"] = cur.rowcount
+            
+            # Delete expired preferences (they don't have active flag)
+            cur.execute("""
+                DELETE FROM preferences
+                WHERE expires_at IS NOT NULL 
+                AND expires_at <= NOW()
+            """)
+            counts["preferences"] = cur.rowcount
+            
+            # Deactivate expired canonical memory
+            cur.execute("""
+                UPDATE canonical_memory 
+                SET active = false, updated_at = NOW()
+                WHERE active = true 
+                AND expires_at IS NOT NULL 
+                AND expires_at <= NOW()
+            """)
+            counts["canonical_memory"] = cur.rowcount
+            
+    except Exception as e:
+        logger.error(f"Error cleaning up expired rules: {e}")
+    
+    return counts
+
+
 def load_active_rules_from_db() -> str:
     """
     Load active rules from the database (boundaries, preferences, canonical memory).
@@ -157,10 +205,12 @@ def load_active_rules_from_db() -> str:
         sections = []
         
         with db_cursor() as cur:
-            # Get active boundaries from database
+            # Get active boundaries from database (exclude expired)
             cur.execute("""
                 SELECT category, rule, description, boundary_type
-                FROM boundaries WHERE active = true
+                FROM boundaries 
+                WHERE active = true 
+                AND (expires_at IS NULL OR expires_at > NOW())
                 ORDER BY category, created_at DESC
             """)
             boundaries = cur.fetchall()
@@ -178,10 +228,11 @@ def load_active_rules_from_db() -> str:
                             sections.append(f"  - {b[2]}")
                 sections.append("\n")
             
-            # Get preferences from database
+            # Get preferences from database (exclude expired)
             cur.execute("""
                 SELECT category, key, value
                 FROM preferences
+                WHERE (expires_at IS NULL OR expires_at > NOW())
                 ORDER BY category, updated_at DESC
             """)
             preferences = cur.fetchall()
@@ -195,10 +246,12 @@ def load_active_rules_from_db() -> str:
                         sections.append(f"- **{p[1]}**: {p[2]} (category: {p[0]})")
                 sections.append("\n")
             
-            # Get active canonical memory from database
+            # Get active canonical memory from database (exclude expired)
             cur.execute("""
                 SELECT category, key, value, description
-                FROM canonical_memory WHERE active = true
+                FROM canonical_memory 
+                WHERE active = true 
+                AND (expires_at IS NULL OR expires_at > NOW())
                 ORDER BY category, created_at DESC
             """)
             canonical = cur.fetchall()

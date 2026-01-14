@@ -519,6 +519,72 @@ async def get_insights():
 
 
 # =============================================================================
+# RULE EXPIRATION ENDPOINTS
+# =============================================================================
+
+@router.post("/rules/cleanup")
+@handle_api_errors("cleanup expired rules")
+async def cleanup_rules():
+    """
+    Clean up expired rules from the database.
+    Marks expired boundaries and canonical memory as inactive.
+    Deletes expired preferences.
+    
+    Returns counts of cleaned up rules by table.
+    """
+    from utils.context_loader import cleanup_expired_rules
+    counts = cleanup_expired_rules()
+    total = sum(counts.values())
+    return {
+        "status": "completed",
+        "total_cleaned": total,
+        "by_table": counts
+    }
+
+
+@router.post("/boundaries/{boundary_id}/expire")
+@handle_api_errors("set boundary expiration")
+async def set_boundary_expiration(boundary_id: str, expires_at: datetime):
+    """
+    Set an expiration date for a boundary.
+    
+    Args:
+        boundary_id: UUID of the boundary
+        expires_at: When the boundary should expire
+    """
+    from db.neon import db_cursor
+    with db_cursor() as cur:
+        cur.execute("""
+            UPDATE boundaries SET expires_at = %s, updated_at = NOW()
+            WHERE id = %s
+        """, (expires_at, boundary_id))
+        if cur.rowcount == 0:
+            raise NotFoundError(f"Boundary not found: {boundary_id}")
+    return {"status": "updated", "id": boundary_id, "expires_at": expires_at.isoformat()}
+
+
+@router.post("/preferences/{preference_key}/expire")
+@handle_api_errors("set preference expiration")
+async def set_preference_expiration(preference_key: str, expires_at: datetime):
+    """
+    Set an expiration date for a preference.
+    
+    Args:
+        preference_key: Key of the preference
+        expires_at: When the preference should expire
+    """
+    from db.neon import db_cursor
+    with db_cursor() as cur:
+        cur.execute("""
+            UPDATE preferences SET expires_at = %s, updated_at = NOW()
+            WHERE key = %s
+        """, (expires_at, preference_key))
+        if cur.rowcount == 0:
+            raise NotFoundError(f"Preference not found: {preference_key}")
+    return {"status": "updated", "key": preference_key, "expires_at": expires_at.isoformat()}
+
+
+# =============================================================================
 # STATUS ENDPOINTS
 # =============================================================================
 
