@@ -268,7 +268,11 @@ def get_recent_patterns(limit: int = 5) -> List[Dict]:
     with db_cursor() as cursor:
         cursor.execute("""
             SELECT pattern_type, pattern_name, description, confidence, 
-                   jsonb_array_length(COALESCE(evidence, '[]'::jsonb)) as evidence_count,
+                   CASE 
+                       WHEN jsonb_typeof(evidence) = 'array' THEN jsonb_array_length(evidence)
+                       WHEN evidence IS NOT NULL THEN 1
+                       ELSE 0
+                   END as evidence_count,
                    detected_at
             FROM patterns
             ORDER BY detected_at DESC
