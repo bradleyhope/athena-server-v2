@@ -317,15 +317,12 @@ async def run_hourly_broadcast():
         logger.error(f"Failed to store broadcast in database: {e}")
         results['broadcast_id'] = None
     
-    # NOTE: Manus task spawning disabled - broadcasts are now logged to Notion only
-    # and included in the morning brief. Only 2 Manus sessions per day:
-    # 1. ATHENA THINKING (5:30 AM)
-    # 2. Workspace & Agenda (5:35 AM)
-    #
-    # To re-enable Manus broadcasts, uncomment below:
-    # if is_active_hours():
-    #     logger.info("Within active hours - spawning Manus broadcast task")
-    #     results["manus_task_id"] = await spawn_broadcast_task(thought)
+    # Spawn Manus task during active hours (5:30 AM - 10:30 PM London)
+    if is_active_hours():
+        logger.info("Within active hours - spawning Manus broadcast task")
+        results["manus_task_id"] = await spawn_broadcast_task(thought)
+    else:
+        logger.info("Outside active hours - skipping Manus task spawn")
     
-    logger.info(f"Hourly broadcast complete: Notion={results['notion_sent']}, ActiveHours={results['is_active_hours']} (Manus spawning disabled)")
+    logger.info(f"Hourly broadcast complete: Notion={results['notion_sent']}, ActiveHours={results['is_active_hours']}, ManusTask={results['manus_task_id']}")
     return results
