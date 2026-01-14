@@ -216,24 +216,29 @@ def get_recent_sessions(days: int = 7) -> List[Dict]:
 
 def get_recent_observations(limit: int = 10, hours: int = None) -> List[Dict]:
     """
-    Get recent observations for context.
+    Get recent observations for context with enriched data.
     
     Args:
         limit: Maximum number of observations to return
         hours: If specified, only return observations from the last N hours
     
     Returns:
-        List of observation dictionaries
+        List of observation dictionaries with title, summary, sender, snippet
     """
     with db_cursor() as cursor:
         if hours:
             cursor.execute("""
                 SELECT
+                    id,
                     category,
-                    COALESCE(summary, title) AS content,
-                    source_type AS source,
-                    1.0 AS confidence,
-                    observed_at AS created_at
+                    title,
+                    summary,
+                    source_type,
+                    priority,
+                    requires_action,
+                    primary_person_email,
+                    raw_metadata,
+                    observed_at
                 FROM observations
                 WHERE observed_at > NOW() - INTERVAL '%s hours'
                 ORDER BY observed_at DESC
@@ -242,25 +247,49 @@ def get_recent_observations(limit: int = 10, hours: int = None) -> List[Dict]:
         else:
             cursor.execute("""
                 SELECT
+                    id,
                     category,
-                    COALESCE(summary, title) AS content,
-                    source_type AS source,
-                    1.0 AS confidence,
-                    observed_at AS created_at
+                    title,
+                    summary,
+                    source_type,
+                    priority,
+                    requires_action,
+                    primary_person_email,
+                    raw_metadata,
+                    observed_at
                 FROM observations
                 ORDER BY observed_at DESC
                 LIMIT %s
             """, (limit,))
-        return [
-            {
+        
+        results = []
+        for row in cursor.fetchall():
+            # Extract useful info from metadata
+            metadata = row['raw_metadata'] or {}
+            sender = metadata.get('from', row['primary_person_email'] or 'Unknown')
+            snippet = metadata.get('snippet', '')
+            
+            # Clean up sender (extract name if email format)
+            if '<' in str(sender):
+                sender = sender.split('<')[0].strip().strip('"\'')
+            
+            results.append({
+                "id": str(row['id']),
                 "category": row['category'],
-                "content": row['content'][:150] if row['content'] else None,
-                "source": row['source'],
-                "confidence": row['confidence'],
-                "when": row['created_at'].strftime("%Y-%m-%d %H:%M") if row['created_at'] else None
-            }
-            for row in cursor.fetchall()
-        ]
+                "title": row['title'][:100] if row['title'] else None,
+                "summary": row['summary'][:150] if row['summary'] else None,
+                "source_type": row['source_type'],
+                "priority": row['priority'],
+                "requires_action": row['requires_action'],
+                "sender": sender[:50] if sender else None,
+                "snippet": snippet[:200] if snippet else None,
+                "when": row['observed_at'].strftime("%Y-%m-%d %H:%M") if row['observed_at'] else None,
+                # Legacy fields for backward compatibility
+                "content": row['summary'] or row['title'],
+                "source": row['source_type'],
+                "confidence": 1.0
+            })
+        return results
 
 
 def get_recent_patterns(limit: int = 5) -> List[Dict]:

@@ -144,22 +144,34 @@ async def generate_thought_burst() -> tuple[Dict[str, Any], List[Dict]]:
     meetings = [o for o in recent_observations if o.get("source_type") == "calendar"]
     other = [o for o in recent_observations if o.get("source_type") not in ["gmail", "calendar"]]
     
-    # Show emails with more context
+    # Identify action-required emails
+    action_emails = [e for e in emails if e.get("requires_action")]
+    
+    # Show emails with sender and snippet for context
     if emails:
         thought_lines.append(f"**📧 Emails ({len(emails)}):**")
         for email in emails[:5]:
-            content = email.get("content", "")[:80]
-            # Try to extract subject/sender if available
-            thought_lines.append(f"- {content}")
+            sender = email.get("sender", "Unknown")[:30]
+            title = email.get("title", "")[:50]
+            snippet = email.get("snippet", "")[:80]
+            
+            # Build a more informative line
+            if snippet and snippet != title:
+                thought_lines.append(f"- **{sender}**: {title}")
+                thought_lines.append(f"  _{snippet}_")
+            else:
+                thought_lines.append(f"- **{sender}**: {title}")
         if len(emails) > 5:
             thought_lines.append(f"  ... and {len(emails) - 5} more")
         thought_lines.append("")
     
-    # Show meetings
+    # Show meetings with time context
     if meetings:
         thought_lines.append(f"**📅 Calendar ({len(meetings)}):**")
         for meeting in meetings[:3]:
-            thought_lines.append(f"- {meeting.get('content', '')[:80]}")
+            title = meeting.get('title', meeting.get('content', ''))[:60]
+            when = meeting.get('when', '')
+            thought_lines.append(f"- {title} ({when})")
         thought_lines.append("")
     
     # Patterns detected
@@ -216,12 +228,15 @@ async def spawn_broadcast_task(thought: Dict[str, Any], reason: str) -> Optional
     london_tz = pytz.timezone('Europe/London')
     now = datetime.now(london_tz)
     
-    # Build the lean broadcast prompt - purely task-focused, no identity claims
+    # Build the lean broadcast prompt with correct feedback endpoint
+    broadcast_id = thought.get('session_id', f"broadcast_{now.strftime('%Y%m%d_%H%M')}")
+    
     prompt = f"""## 📡 Athena Broadcast
 
 **Time:** {now.strftime('%A, %B %d, %Y at %H:%M')} London time
 **Type:** {thought['type']} | **Priority:** {thought['priority']}
 **Why you're seeing this:** {reason}
+**Broadcast ID:** {broadcast_id}
 
 ---
 
@@ -232,8 +247,30 @@ async def spawn_broadcast_task(thought: Dict[str, Any], reason: str) -> Optional
 ## Quick Actions
 
 - **Acknowledge**: Say "noted" to dismiss
-- **Feedback**: Tell me if this was useful or not
+- **Useful**: Say "useful" if this was helpful
+- **Not useful**: Say "not useful" and why
 - **Action**: Ask me to help with any item above
+
+## If Bradley Provides Feedback
+
+Submit feedback to the Athena Brain API:
+
+**Endpoint:** `POST https://athena-server-0dce.onrender.com/api/brain/feedback`
+**Header:** `Authorization: Bearer athena_api_key_2024`
+**Body:**
+```json
+{{
+  "feedback_type": "broadcast_feedback",
+  "target_type": "broadcast",
+  "target_id": "{broadcast_id}",
+  "sentiment": "positive" or "negative",
+  "feedback_data": {{
+    "useful": true/false,
+    "reason": "user's feedback text",
+    "broadcast_title": "{thought['title'][:50]}"
+  }}
+}}
+```
 
 This is a quick check-in. I'll only interrupt when something needs attention."""
 
