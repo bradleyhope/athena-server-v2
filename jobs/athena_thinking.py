@@ -5,6 +5,7 @@ This is NOT a task-focused session - it's Athena analyzing and improving herself
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
