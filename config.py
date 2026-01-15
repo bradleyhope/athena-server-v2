@@ -1,6 +1,11 @@
 """
 Athena Server v2 - Configuration
 Environment variables and settings.
+
+Updated 2026-01-15: GitHub-first migration
+- Removed deprecated Notion page IDs (ATHENA_COMMAND_CENTER_ID, CANONICAL_MEMORY_ID, etc.)
+- These are now loaded from cogos-system/docs/athena/ATHENA_INIT.md
+- Kept database IDs for logging (SESSION_ARCHIVE_DB_ID, ATHENA_TASKS_DB_ID, etc.)
 """
 
 import os
@@ -37,14 +42,16 @@ class Settings:
     # Notion
     NOTION_API_KEY: str = os.getenv("NOTION_API_KEY", "")
     
-    # Canonical Notion Page IDs
-    ATHENA_COMMAND_CENTER_ID: str = "2e3d44b3-a00b-81ab-bbda-ced57f8c345d"
-    CANONICAL_MEMORY_ID: str = "2e4d44b3-a00b-810e-9ac1-cbd30e209fab"
-    VIP_CONTACTS_ID: str = "2e4d44b3-a00b-8112-8eb2-ef28cec19ae6"
-    POLICIES_RULES_ID: str = "2e4d44b3-a00b-813c-a564-c7950f0db4a5"
-    WORKSPACE_GUIDE_PAGE_ID: str = "2e5d44b3-a00b-813f-83fa-f3f3859d3ce8"
+    # DEPRECATED: Notion Page IDs (2026-01-15)
+    # These are now loaded from cogos-system/docs/athena/ATHENA_INIT.md
+    # Kept as comments for reference during transition period
+    # ATHENA_COMMAND_CENTER_ID: str = "2e3d44b3-a00b-81ab-bbda-ced57f8c345d"
+    # CANONICAL_MEMORY_ID: str = "2e4d44b3-a00b-810e-9ac1-cbd30e209fab"
+    # VIP_CONTACTS_ID: str = "2e4d44b3-a00b-8112-8eb2-ef28cec19ae6"
+    # POLICIES_RULES_ID: str = "2e4d44b3-a00b-813c-a564-c7950f0db4a5"
+    # WORKSPACE_GUIDE_PAGE_ID: str = "2e5d44b3-a00b-813f-83fa-f3f3859d3ce8"
 
-    # Notion Database IDs
+    # Notion Database IDs (still in use for logging and task management)
     BROADCASTS_DATABASE_ID: str = "70b8cb6eff9845d98492ce16c4e2e9aa"
     SESSION_ARCHIVE_DB_ID: str = "d075385d-b6f3-472b-b53f-e528f4ed22db"
     ATHENA_TASKS_DB_ID: str = "44aa96e7-eb95-45ac-9b28-f3bfffec6802"

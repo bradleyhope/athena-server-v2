@@ -20,8 +20,9 @@ logger = logging.getLogger("athena.context_loader")
 _context_cache: Dict[str, tuple[str, datetime]] = {}
 _cache_ttl = timedelta(minutes=5)
 
-# Path to cogos-system context directory
-CONTEXT_DIR = Path("/home/ubuntu/cogos-system/docs/athena/context")
+# Path to cogos-system root and context directory
+COGOS_ROOT = Path("/home/ubuntu/cogos-system")
+CONTEXT_DIR = COGOS_ROOT / "docs/athena/context"
 
 
 def _load_file(file_path: Path) -> str:
@@ -53,6 +54,26 @@ def _get_cached_or_load(cache_key: str, file_path: Path) -> str:
     content = _load_file(file_path)
     _context_cache[cache_key] = (content, now)
     return content
+
+
+def load_specific_doc(doc_path: str) -> Optional[str]:
+    """
+    Load a specific document from the cogos-system repository.
+    
+    This is the primary function for loading documents like ATHENA_INIT.md
+    that serve as base prompts for sessions.
+    
+    Args:
+        doc_path: Relative path from COGOS_ROOT (e.g., "docs/athena/ATHENA_INIT.md")
+        
+    Returns:
+        Document content as string, or None if not found
+    """
+    full_path = COGOS_ROOT / doc_path
+    if not full_path.exists():
+        logger.error(f"Document not found: {full_path}")
+        return None
+    return _get_cached_or_load(f"doc_{doc_path}", full_path)
 
 
 def load_voice_guide() -> str:
