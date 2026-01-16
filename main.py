@@ -153,10 +153,10 @@ def setup_scheduled_jobs():
         replace_existing=True
     )
     
-    # Pattern detection - every 2 hours
+    # Pattern detection - every 30 minutes
     scheduler.add_job(
         run_pattern_detection,
-        CronTrigger(hour="*/2", minute=15),
+        CronTrigger(minute="*/30"),
         id="pattern_detection",
         name="Pattern Detection (Tier 2)",
         replace_existing=True

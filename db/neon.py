@@ -128,14 +128,19 @@ def get_recent_observations(limit: int = 50, source_type: str = None) -> list:
         return cursor.fetchall()
 
 
-def get_unprocessed_observations() -> list:
-    """Get observations not yet processed by pattern detection."""
+def get_unprocessed_observations(limit: int = 100) -> list:
+    """Get observations not yet processed by pattern detection.
+    
+    Args:
+        limit: Maximum number of observations to return (default 100)
+    """
     with db_cursor() as cursor:
         cursor.execute("""
             SELECT * FROM observations 
             WHERE processed_tier_2 = FALSE OR processed_tier_2 IS NULL
             ORDER BY observed_at DESC
-        """)
+            LIMIT %s
+        """, (limit,))
         return cursor.fetchall()
 
 
