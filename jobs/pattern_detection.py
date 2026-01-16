@@ -68,7 +68,7 @@ Respond in JSON format:
     ]
 }}
 
-Only include patterns with confidence >= 0.7. If no strong patterns, return empty list."""
+Only include patterns with confidence >= 0.6. If no strong patterns, return empty list."""
 
     try:
         response = client.messages.create(
@@ -124,13 +124,15 @@ async def run_pattern_detection():
             # Convert observation_ids to proper format (they come as strings from Claude)
             observation_ids = pattern.get('observation_ids', [])
             if observation_ids and isinstance(observation_ids[0], str):
-                # Validate that they look like UUIDs
-                try:
-                    from uuid import UUID
-                    observation_ids = [str(UUID(oid)) for oid in observation_ids]
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Invalid observation IDs format: {e}, using empty list")
-                    observation_ids = []
+                # Validate UUIDs individually, keep valid ones
+                from uuid import UUID
+                valid_ids = []
+                for oid in observation_ids:
+                    try:
+                        valid_ids.append(str(UUID(oid)))
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Skipping invalid UUID in pattern: {oid}")
+                observation_ids = valid_ids
             
             pattern_data = {
                 'pattern_type': pattern['pattern_type'],
