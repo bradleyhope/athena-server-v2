@@ -107,15 +107,15 @@ def collect_gmail_observations(client: OpenAI) -> List[Dict]:
         creds = get_google_credentials()
         service = build('gmail', 'v1', credentials=creds)
         
-        # Get unread emails from the last hour
+        # Get emails from the last hour (not just unread)
         results = service.users().messages().list(
             userId='me',
-            q='is:unread newer_than:1h',
+            q='newer_than:1h',
             maxResults=20
         ).execute()
         
         messages = results.get('messages', [])
-        logger.info(f"Found {len(messages)} unread emails")
+        logger.info(f"Found {len(messages)} emails from last hour")
         
         for msg in messages:
             # Get full message
